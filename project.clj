@@ -1,0 +1,11 @@
+(defproject jdt "0.1.0-SNAPSHOT"
+  :description "These are not the tools you're looking for."
+  :url "http://example.com/FIXME"
+  :license {:name "Eclipse Public License"
+            :url "http://www.eclipse.org/legal/epl-v10.html"}
+  :dependencies [[org.clojure/clojure "1.5.1"]
+                 [me.raynes/conch "0.6.0"]
+                 [me.raynes/fs "1.4.5"] ; presently a locally managed repo
+                 [org.clojure/java.classpath "0.2.2"]
+                 [enlive "1.1.5"] ; net.cgrand.enlive-html - for html parsin (and minor fetching)
+                 ])
