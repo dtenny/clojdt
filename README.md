@@ -1,7 +1,9 @@
 # jdt
 
-Tools I prefer to have around.  Some are more useful from the REPL, some
-are more useful for general coding.  
+Personal Clojure development tools hosted on a public github repository because I'm
+too cheap to pay for a private one to keep my bits in the cloud.  These
+probably aren't the tools you're looking for.
+
 
 ## Usage
 
@@ -12,10 +14,11 @@ the kits.
 {:user {:dependencies [[jdt "0.1.0-SNAPSHOT"]
                        [org.clojure/tools.trace "0.7.6"] 
                        ]
-        :injections [(use 'jdt.cl)  ;pulls in jdtutil.core
-                     (println "~/.lein/profiles.clj loaded jdt.{cl,core}")
+        :injections [(use '[jdt core cl shell java])
+                     (println "~/.lein/profiles.clj loaded jdt.*")
                      (use 'clojure.tools.trace)
-                     (println "~/.lein/profiles.clj loaded clojure.tools.trace")
+                     (require 'clojure.inspector)
+                     (println "~/.lein/profiles.clj use: clojure.tools.trace, require: clojure.inspector")
                      ]}}
 ```
 

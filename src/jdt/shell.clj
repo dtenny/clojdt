@@ -157,7 +157,7 @@
 
 ;; TODO: want things for bash internal commands, like 'history' ?  Maybe called bash-history
 
-(defn- executeWithDefaultOptions
+(defn executeWithDefaultOptions         ;must be public for macro use below
   "Make (:seq true) be the default options if no :seq options were specified with command."
   [name & args]
   (let [[[options] only-args] ((juxt filter remove) map? args)]

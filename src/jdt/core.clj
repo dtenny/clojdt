@@ -45,7 +45,22 @@
 (defn logically-true?
   "Tests a value for logical truth (non-nil and non-false),
   returns the value if it's logically true, returns nil otherwise.
-  See 'not-nil?' for a subset of this test."
+  See 'not-nil?' for a subset of this test.
+  I think I like the 'false->nil' name for this better."
+  ^{:see-also 'false->nil}
+  [val]
+  (if val
+    val
+    nil))
+
+(defn false->nil
+  "Convert false to nil, return anything else as-is.
+
+  Tests a value for logical truth (non-nil and non-false),
+  returns the value if it's logically true, returns nil otherwise.
+  See 'not-nil?' for a subset of this test.
+  An alternative name for 'logically-true?'."
+  ^{:see-also 'logically-true?}
   [val]
   (if val
     val
@@ -59,6 +74,32 @@
 (defmacro unless [condition & body]
     `(when (not ~condition)
        ~@body))
+
+(defmacro until
+  "Repeatedly executes body until test expression is true. Presumes
+  some side-effect will cause test to become false/nil. Returns nil"
+  [test & body]
+  `(loop []
+     (do ~@body)
+     (or ~test 
+         (recur))))
+
+(defn prompt
+  "Prompt user for input and return what was typed.
+  Not a sticky/looping prompt, if the user enters an empty line, prompt returns an empty line."
+  [prompt-string]
+  (println prompt-string)
+  (flush)
+  (read-line))
+
+(defn y-or-n-p?
+  "Prompt user for 'y' or 'n' until it is entered in response to a given prompt string.
+  Return true if 'y' is specified, nil otherwise."
+  [ prompt-string]
+  (logically-true?
+   (= "y"
+      (until (re-matches #"[yn]" (prompt prompt-string))))))
+
 
 (defn find-if
   "Returns the first element in coll for which predicate returns true,

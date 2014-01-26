@@ -120,14 +120,17 @@
 (def ^{:dynamic true} javadoc-dir "/usr/java/jdk1.7.0_45/docs/api")
 
 (defn jdk-javadoc-url
-  "Given a package qualified java class name in the standard JDK, return an URL that can be used
-   to look up javadoc for the class. (Consults javadoc-dir).
-   E.g. \"java.lang.String\" might translate to 
-   \"/usr/java/jdk1.7.0_45/docs/api/java/lang/String.html\""
-  [class-name]
-  (str "file://" javadoc-dir File/separator (.replace class-name "." File/separator) ".html"))
+  "Given a String representing package qualified java class name in the standard JDK,
+  OR given a java.lang.Class object instance (e.g. java.lang.String), return an URL that can be used
+  to look up javadoc for the class. (Consults javadoc-dir).
+  E.g. \"java.lang.String\" might translate to 
+  \"/usr/java/jdk1.7.0_45/docs/api/java/lang/String.html\""
+  [class-or-class-name]
+  (let [class-name (if (class? class-or-class-name) (.getName class-or-class-name) class-or-class-name)]
+    (str "file://" javadoc-dir File/separator (.replace class-name "." File/separator) ".html")))
 
 (defn test []
-  (fetch-javadoc-method-text (jdk-javadoc-url "java.lang.String") "length"))
+  (jdt.core/printlines (fetch-javadoc-method-text (jdk-javadoc-url "java.lang.String") "length"))
+  (jdt.core/printlines (fetch-javadoc-method-text (jdk-javadoc-url String) "length")))
 
-(println "*FINISH*: use me in a an augmnetedd 'doc' routine, and allow class objects as well as strings identifying them for the input class specification.")
+(println "(jdt.html/test) *FINISH*: use me in a an augmented 'doc' routine, support multiple url sources.")
