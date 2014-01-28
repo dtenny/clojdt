@@ -133,4 +133,4 @@
   (jdt.core/printlines (fetch-javadoc-method-text (jdk-javadoc-url "java.lang.String") "length"))
   (jdt.core/printlines (fetch-javadoc-method-text (jdk-javadoc-url String) "length")))
 
-(println "(jdt.html/test) *FINISH*: use me in a an augmented 'doc' routine, support multiple url sources.")
+(println "(jdt.html/test) *FINISH*: use me in a an augmented 'doc' routine, support multiple url sources.  Also include 'clojuredocs' once we no more about it.")
