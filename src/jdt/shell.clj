@@ -46,15 +46,17 @@
     (or (bash-user-homedir-expansion string)
         (bash-user-homedir-pwd-expansion string)
         string)))
-(assert (= (bash-tilde-expansion "abc") "abc"))
-(assert (= (bash-tilde-expansion "~abc") "/home/abc"))
-(assert (= (bash-tilde-expansion "~abc/") "/home/abc/"))
-(assert (= (bash-tilde-expansion "~abc/def") "/home/abc/def"))
-(assert (= (bash-tilde-expansion "~+") (System/getProperty "user.dir")))
-(assert (= (bash-tilde-expansion "~+abc") "~+abc"))
-(assert (= (bash-tilde-expansion "~+/") (str (System/getProperty "user.dir") "/")))
-(assert (= (bash-tilde-expansion "~+/def") (str (System/getProperty "user.dir") "/def")))
 
+(comment
+  (assert (= (bash-tilde-expansion "abc") "abc"))
+  (assert (= (bash-tilde-expansion "~abc") "/home/abc"))
+  (assert (= (bash-tilde-expansion "~abc/") "/home/abc/"))
+  (assert (= (bash-tilde-expansion "~abc/def") "/home/abc/def"))
+  (assert (= (bash-tilde-expansion "~+") (System/getProperty "user.dir")))
+  (assert (= (bash-tilde-expansion "~+abc") "~+abc"))
+  (assert (= (bash-tilde-expansion "~+/") (str (System/getProperty "user.dir") "/")))
+  (assert (= (bash-tilde-expansion "~+/def") (str (System/getProperty "user.dir") "/def")))
+  )
   
 ;; CONCH NOTES:
 ;; -- ARGS --

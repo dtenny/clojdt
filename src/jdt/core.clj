@@ -1,7 +1,9 @@
 (ns jdt.core
   (import java.io.File)
+  (import java.io.BufferedReader)
   (import java.util.Date)
   (import java.text.SimpleDateFormat)
+  (use clojure.tools.trace)
   (require clojure.java.io)
   (use clojure.test))                  ;'is'
 
@@ -65,6 +67,14 @@
   (if val
     val
     nil))
+
+(defn empty->nil
+  "Convert empty sequences to nil, since () is != nil in clojure.
+  Return non-empty sequences as is."
+  [s]
+  (if (empty? s)
+    nil
+    s))
 
 (defn not-nil?
   "Returns true if the specified value is not nil (including if the value is false)."
@@ -313,6 +323,114 @@
 ;;(printlines '(a b c))
 ;;(printlines 1 '(2 3 4) [5 6 7])
 
+(defn readlines
+  "Given some I/O source compatible with clojure.java.io/reader (which will be closed),
+  return a vector of lines readable from the source.
+  If 'count' is nil, read all lines, otherwise read at most 'count' lines."
+  ([source]
+     ;; Note, to return a lazy sequence, we'd need to return some lazy opener/closer
+     ;; and ensure it was invoked by storing it some java weak reference so that we close it when gc'd.
+     (with-open [^BufferedReader rdr (clojure.java.io/reader source)] ;returns a BufferedReader
+       (loop [lines []]
+         (if-let [line (.readLine rdr)]
+           (recur (conj lines line))
+           lines))))
+  ([source count]
+     {:pre [(or (nil? count) (integer? count))]}
+     (if (nil? count)
+       (readlines source)
+       (with-open [^BufferedReader rdr (clojure.java.io/reader source)]
+         (loop [lines [] count count]
+           (if (> count 0)
+             (if-let [line (.readLine rdr)]
+               (recur (conj lines line) (- count 1))
+               lines)
+             lines))))))
+
+(defn string-contains? 
+  "Return the zero-based index of substring in string if present, nil if not present.
+   This method exists because you can't pass '.contains' as a function for java interop,
+   and 'contains?' does not work for this use case.
+
+   See 'contained-in-string?' for function with reversed argument order."
+  [^String string ^String substring]
+  (let [index (.indexOf string substring)]
+    (if (>= index 0)
+      index
+      nil)))                            ;transform -1 to nil
+
+(defn contained-in-string?
+  "Reverse argument order for 'string-contains?'
+   Accepts the substring to be matched in the same argument position as the regular expression in
+   're-find' or 're-matches'"
+  [substring string]
+  (string-contains? string substring))
+  
+(defn map-matches
+  "Match patterns in a sequence of map key/val pairs against a line as described in 'select-matching-strings',
+   if there are matches return a sequence of keys in the map whose values matched the line.
+
+   We require a sequence of map key/val pairs instead of the map to avoid
+   regenerating the (sequence of) pairs for every call to this function for some map.
+
+   E.g. (map-matches \"abc\" (seq {:b-key \"b\" :a-key \"a\" :d-key \"d\"}) contained-in-string?)
+   =>   [:a-key :b-key]
+
+   There will be no duplicate keys in the result."
+  [string pattern-map-seq match-predicate]
+  (map first                            ;extract keys from filter returning kv-pairs
+   (filter (fn [kvpair]
+             (match-predicate (second kvpair) string))
+           pattern-map-seq)))
+
+#_
+(assert (= (map-matches "abc" (seq {:b-key "b" :a-key "a" :d-key "d"}) contained-in-string?)
+           '(:b-key :a-key)))
+
+(defn select-matching-strings
+  "Given a input sequence of strings, a map of key/pattern pairs, and a match-predicate to apply
+   to the pattern values in the map, return a map keyed by the keys in the input map,
+   and valued by a vector of lines that matched the corresponding keyword's value/pattern.
+
+   E.g.
+   (select-matching-strings (readlines \".bashrc\") {:comments #\"^\\s*#.*\"} re-matches)
+   => {:comments [\"#!/bin/bash\" \"# some comment in .bashrc\" ...]}
+
+   You can specify multiple key/pattern pairs, if there are multiples they are applied to each line
+   (so an input line can potentially match multiple patterns).
+
+   In all cases, the predicate is invoked as (match-predicate pattern line-string)
+
+   Specify 're-find' if you want to match partial input strings with regualar expressions.
+   E.g. (select-matching-strings lines {:comments \"^#\"} re-find)
+   will match any line that starts with a hash in the first column.
+
+   Specify 'contained-in-string?' (or similar predicate)
+   if you want to match partial input strings against non-regular-expression text.
+   E.g. (select-matching-strings lines {:comments \"#\"} contained-in-string?)
+   will match any line containing a # in any position.
+
+   This is not meant to be particularly efficient, it is a convenience for picking up a few matching
+   lines from small files and such, such as parsing credentials out of files that have similar but different
+   formats. (AWS comes to mind)."
+  
+  ;;*FINISH*: Figure out a good way to include the matched text, not just the input line, like re-groups.
+  ;;*FINISH*: Figure out a way to allow the result collection specification by specifying a prototype input,
+  ;; e.g. #(), [], {}, or ().
+
+  [lines pattern-map match-predicate]
+  (loop [lines (seq lines), result {}]
+    (let [line (first lines)]
+      (if line
+        (if-let [matching-keys (empty->nil (map-matches line pattern-map match-predicate))]
+          (recur (next lines) (merge-with concat result
+                                          ;; Add line to each key's pattern that was matched
+                                          (apply hash-map
+                                                 (interleave matching-keys
+                                                             (repeat (count matching-keys) [line])))))
+          (recur (next lines) result))
+        result))))
+
 ;;; This addition to Clojure's assoc is not compatible with Common Lisp's assoc-if (neither is
 ;;; Clojure's assoc compatible with CL's assoc).
 (defn assoc-if
@@ -383,7 +501,7 @@
   If the file name has no suffix, append the timestamp.  Return the updated file name.
   E.g. (timestamp-filename \"/tmp/backup.tgz\") => /tmp/backup.2014DEC23-144320.tgz
        (timestamp-filename \"abc\") => abc.2014DEC23-144320"
-  [filename]
+  [^String filename]
   (let [dot-pos (.lastIndexOf filename ".")
         have-dot (>= dot-pos 0)
         prefix (if have-dot (.substring filename 0 dot-pos) filename)
