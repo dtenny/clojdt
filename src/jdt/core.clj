@@ -383,10 +383,6 @@
              (match-predicate (second kvpair) string))
            pattern-map-seq)))
 
-#_
-(assert (= (map-matches "abc" (seq {:b-key "b" :a-key "a" :d-key "d"}) contained-in-string?)
-           '(:b-key :a-key)))
-
 (defn select-matching-strings
   "Given a input sequence of strings, a map of key/pattern pairs, and a match-predicate to apply
    to the pattern values in the map, return a map keyed by the keys in the input map,
@@ -414,8 +410,8 @@
    lines from small files and such, such as parsing credentials out of files that have similar but different
    formats. (AWS comes to mind)."
   
-  ;;*FINISH*: Figure out a good way to include the matched text, not just the input line, like re-groups.
-  ;;*FINISH*: Figure out a way to allow the result collection specification by specifying a prototype input,
+  ;;*TODO*: Figure out a good way to include the matched text, not just the input line, like re-groups.
+  ;;*TODO*: Figure out a way to allow the result collection specification by specifying a prototype input,
   ;; e.g. #(), [], {}, or ().
 
   [lines pattern-map match-predicate]
