@@ -5,6 +5,7 @@
   (import java.text.SimpleDateFormat)
   (use clojure.tools.trace)
   (require clojure.java.io)
+  (require [clojure.pprint :refer [cl-format]])
   (use clojure.test))                  ;'is'
 
 #_
@@ -110,7 +111,6 @@
    (= "y"
       (until (re-matches #"[yn]" (prompt prompt-string))))))
 
-
 (defn find-if
   "Returns the first element in coll for which predicate returns true,
    unlike 'some' that returns the true if there is any object in coll for which pred returns true."
@@ -121,6 +121,17 @@
       (if (pred item)
         item
         (recur pred (rest coll))))))
+
+(defn apropos-match-fn
+  "Given a string or regular expression, return a function that will invoke .contains or re-find 
+  respectively on the pattern string or regular expression against an input string.
+  (So the returned function is a function of one argument, the string to be tested against the pattern)."
+  [str-or-pattern]
+  (cond (instance? java.util.regex.Pattern str-or-pattern)
+        (fn [string] (re-find str-or-pattern string))
+        (string? str-or-pattern)
+        (fn [string] (.contains string str-or-pattern))
+        true (throw (Exception. (cl-format nil  "Expected String or Pattern, got '~a'~%" str-or-pattern)))))
 
 (defmacro and-let 
   "Like LET, but if any binding is NIL AND-LET immediately returns NIL and BODY is not executed.

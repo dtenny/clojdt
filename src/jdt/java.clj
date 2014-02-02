@@ -1,25 +1,14 @@
 (ns ^{:doc "Utilities for working with Java"}
     jdt.java
+    (:use jdt.core)
     (:require [clojure.java.classpath :as classpath])
     (:require [clojure.java.io :as io])
     ;;(:import java.io.File)
     (:import java.util.jar.JarFile)
     )
 
-;;; Utilities for working with Java
-
 ;; namespace-listing methods (for functions in a namespace)
 ;; java package/class listing methods (for class/functions/variables in a java class/package)
-
-(defn- get-matcher
-  "Given a string or regular expression, return a function of one argument the returns true
-  if the string or regular expression matches the string form of the function argument.
-
-  E.g. (matcher \"abc\") => #(contains? (str %) string)."
-  [string-or-regexp]
-  (if (instance? java.util.regex.Pattern string-or-regexp)
-    #(re-find string-or-regexp  (str %))
-    #(.contains (str %) (str string-or-regexp)))) 
 
 (defn classpaths
   "Return a sequence representing the java class path"
@@ -29,7 +18,7 @@
 (defn classpath-jar-filename-apropos
   "Given a string or regular expression, find jar files in classpath whose names match the argument"
   [string-or-regexp]
-    (filter (get-matcher string-or-regexp)
+    (filter (apropos-match-fn string-or-regexp)
             (filter classpath/jar-file? (classpaths))))
 
 (defn jar-files
@@ -44,13 +33,18 @@
   "Given a regular expression or stringable thing,
 return a seq of all accessible java packages that match the string-or-regexp"
   [string-or-regexp]
-    (filter (get-matcher string-or-regexp) (map #(.getName %1) (Package/getPackages))))
+    (filter (apropos-match-fn string-or-regexp) (map #(.getName %1) (Package/getPackages))))
 
 (defn class-member-list
   "List public 'member' methods and fields of a Java class.
 Not sure about inherited stuff and static methods."
   [class]
   (concat (.getFields class) (.getMethods class)))
+
+(defn class-apropos "Perform apropos on a class and return class members that match str-or-pattern"
+  [class str-or-pattern]
+  (let [matches? (apropos-match-fn str-or-pattern)]
+    (filter (fn [method] (matches? (.getName method))) (class-member-list class))))
 
 #_
 (defn find-classes 
