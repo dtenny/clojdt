@@ -7,6 +7,7 @@
   (:use jdt.core)
   (:use clojure.java.io)                ;copy, input-stream, output-stream, etc
   (:use me.raynes.conch)
+  (:import java.io.File)
   )
 
 (defn- bash-user-homedir-token-expansion
@@ -20,6 +21,15 @@
       (let [myusername (System/getProperty "user.name")]
         ;; Replace /home/xxx with 'joe'
         (.replaceFirst homedir (str "/" myusername) (str "/" user))))))
+
+(defn user-homedir
+  "If a user name (string) is supplied, return the home directory of the indicated user (presently a hack.)
+  If no name is specified, supply the home directory of the user owning the calling process."
+  [& [user]]
+  (let [homedir (System/getProperty "user.home")]
+    (if (string? user)
+      (str (-> homedir File. .getParent) File/separator user)
+      homedir)))
 
 (defn- bash-user-homedir-expansion
   "Helper function to return ~[user] exapnsion or nil if there is no such reference."
@@ -47,17 +57,6 @@
         (bash-user-homedir-pwd-expansion string)
         string)))
 
-(comment
-  (assert (= (bash-tilde-expansion "abc") "abc"))
-  (assert (= (bash-tilde-expansion "~abc") "/home/abc"))
-  (assert (= (bash-tilde-expansion "~abc/") "/home/abc/"))
-  (assert (= (bash-tilde-expansion "~abc/def") "/home/abc/def"))
-  (assert (= (bash-tilde-expansion "~+") (System/getProperty "user.dir")))
-  (assert (= (bash-tilde-expansion "~+abc") "~+abc"))
-  (assert (= (bash-tilde-expansion "~+/") (str (System/getProperty "user.dir") "/")))
-  (assert (= (bash-tilde-expansion "~+/def") (str (System/getProperty "user.dir") "/def")))
-  )
-  
 ;; CONCH NOTES:
 ;; -- ARGS --
 ;; 1) An optional last argument as a map presents options interpreted by CONCH (not the external program)
@@ -152,6 +151,16 @@
 
 
 
+(defn do-substitutions
+  "Do bash construct expansion to the extent we support it.
+  'args' should be a collection."
+  [args]
+  (map (fn [arg]
+         (if (string? arg)
+           (bash-tilde-expansion arg)
+           arg))
+       args))
+
 ;; These are lifted from your PATH.  We could automatically round up the ones from the bin directory
 ;; for now I've just lifted my personal working set
 ;; TODO: this 'find' would supersede clojure's find
@@ -162,7 +171,8 @@
 (defn executeWithDefaultOptions         ;must be public for macro use below
   "Make (:seq true) be the default options if no :seq options were specified with command."
   [name & args]
-  (let [[[options] only-args] ((juxt filter remove) map? args)]
+  (let [args (do-substitutions args)
+        [[options] only-args] ((juxt filter remove) map? args)]
     (if (:seq options)
       (apply execute name args) ;leave already specified :seq value alone
       (apply execute name (concat only-args (list (assoc options :seq true)))))))
@@ -234,7 +244,7 @@ Also arranges for {:seq true} to be the default options for conch-wrapped comman
 ;; rename host.clj sh.clj or something?  core.clj is unnecessary
 
 (defn pwd []
-  "Return the working directory of the process"
+  "Return the working directory of the process. See also (user-homedir)"
   (System/getProperty "user.dir"))
 
 (defprogram ^{:doc "Invoke 'tar' from the calling shell's PATH."} tar tar)
