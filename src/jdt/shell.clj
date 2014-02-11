@@ -189,13 +189,13 @@ Also arranges for {:seq true} to be the default options for conch-wrapped comman
 ;; Can we use :dir :env with the above commands?
 
 (defprogram ^{:doc "Invoke 'ls' from the calling shell's PATH."} ls ls)
-;;(println (meta #'ls))
-;;(println)(println (ls))
 (defn lf [& args]
   (take 40 (rest (apply ls "-lt" args)))) ;rest skips header line
-
 (defprogram ^{:doc "Invoke 'which' from the calling shell's PATH."} which which)
 (defprogram ^{:doc "Invoke 'apropos' from the calling shell's PATH."} os-apropos apropos)
+(defprogram ^{:doc "Invoke 'cat' from the calling shell's PATH."} cat cat)
+(defprogram ^{:doc "Invoke 'tail' from the calling shell's PATH."} tail tail)
+(defprogram ^{:doc "Invoke 'head' from the calling shell's PATH."} head head)
 
 (defn- run-less
   "Run the 'less' program on the indicated file.  Wait for it to complete."
