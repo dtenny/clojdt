@@ -1,8 +1,8 @@
 # jdt
 
 Seriously, these aren't the tools you're looking for.  I'm just messing
-around, think of this as a ~/.clojurerc in progress, hosted on github repository because I'm
-too cheap to pay for a private one to keep my bits in the cloud.  
+around. Think of this as a ~/.clojurerc in progress and hosted on github
+to learn github-ish things.
 
 
 ## Usage
