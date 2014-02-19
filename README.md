@@ -1,4 +1,4 @@
-# JDT
+# jdt
 
 Seriously, these aren't the tools you're looking for.  I'm just messing
 around, think of this as a ~/.clojurerc in progress, hosted on github repository because I'm
