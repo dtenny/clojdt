@@ -1,8 +1,8 @@
-# jdt
+# JDT
 
-Personal Clojure development tools hosted on a public github repository because I'm
-too cheap to pay for a private one to keep my bits in the cloud.  These
-probably aren't the tools you're looking for.
+Seriously, these aren't the tools you're looking for.  I'm just messing
+around, think of this as a ~/.clojurerc in progress, hosted on github repository because I'm
+too cheap to pay for a private one to keep my bits in the cloud.  
 
 
 ## Usage
