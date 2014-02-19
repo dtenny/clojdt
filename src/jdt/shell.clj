@@ -196,6 +196,10 @@ Also arranges for {:seq true} to be the default options for conch-wrapped comman
 (defprogram ^{:doc "Invoke 'cat' from the calling shell's PATH."} cat cat)
 (defprogram ^{:doc "Invoke 'tail' from the calling shell's PATH."} tail tail)
 (defprogram ^{:doc "Invoke 'head' from the calling shell's PATH."} head head)
+(defprogram ^{:doc "Invoke 'rm' from the calling shell's PATH."} rm rm)
+(defprogram ^{:doc "Invoke 'rmdir' from the calling shell's PATH."} rmdir rmdir)
+(defprogram ^{:doc "Invoke 'mkdir' from the calling shell's PATH."} mkdir mkdir)
+
 
 (defn- run-less
   "Run the 'less' program on the indicated file.  Wait for it to complete."

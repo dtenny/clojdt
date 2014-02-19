@@ -33,10 +33,14 @@
 
 
 (defmacro def-
-  "Like 'def', only the resulting symbol is private to the namespace.
-   Why clojure doesn't define this I have no idea."
+  "Like 'def', only the resulting symbol is private to the namespace."
   [var & rest]
   `(def ~(with-meta var (assoc (meta var) :private true)) ~@rest))
+
+(defmacro defonce-
+  "Like 'defonce', only the resulting symbol is private to the namespace."
+  [var & rest]
+  `(defonce ~(with-meta var (assoc (meta var) :private true)) ~@rest))
 
 (defmacro defdynamic
   "Define a dynamic var that can be bound using the 'binding' form."
@@ -44,6 +48,12 @@
   ;; Careful using reader macros like ^ in macros, and meta is particularly tricky.
   ;; See http://stackoverflow.com/questions/989374/help-me-write-a-clojure-macro-which-automatically-adds-metadata-to-a-function-de
   `(def ~(with-meta var (assoc (meta var) :dynamic true)) ~@rest))
+
+(defn logically-false?
+  "Return true if the supplied argument is logically false, otherwise nil."
+  [x]
+  (or (false? x)
+      (nil? x)))
 
 (defn logically-true?
   "Tests a value for logical truth (non-nil and non-false),
@@ -81,6 +91,19 @@
   "Returns true if the specified value is not nil (including if the value is false)."
   [value]
   (not (nil? value)))
+
+(defn false-arg-wrap
+  "Wraps a function f so that if any arguments passed to f are logically false, the returned function
+  returns nil.  Otherwise the returned function applies f to its args.  See also 'fnil'.
+  E.g.
+    (def *nil (false-arg-wrap *))
+    (*nil 1 2 3) => 6
+    (*nil 1 nil 3) => nil"
+  [f]
+  (fn [& args]
+    (if (some logically-false? args)
+     nil
+     (apply f args))))
 
 (defmacro unless [condition & body]
     `(when (not ~condition)
