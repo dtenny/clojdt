@@ -1,6 +1,6 @@
 (ns
     ^{:doc "Wrap java.io.Closeable objects in a machanism that will eventually ensure they're closed."}
-    jdt.closer
+  jdt.closer
   (import java.io.Closeable)
   (import java.util.Vector)
   (import [java.lang.ref PhantomReference ReferenceQueue]))
