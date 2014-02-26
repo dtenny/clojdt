@@ -70,7 +70,7 @@
         (and (string? x) (not suppress-tilde))
         (as-path (bash-tilde-expansion x))
         :else (as-path x)))
-
+
 ;;
 ;; Single path predicates (pred path optionmap), second arg optional.
 ;;
@@ -95,7 +95,7 @@
 
 
 (defn exists?
-  "Return true if x exists, false otherwise.
+  "Return true if x (a path coercible thing) exists, false otherwise.
    This is a wrapper around java.nio.file.Files/exists().
   Options:
     :follow true/false, whether or not to follow symbolic link if x is a link.
@@ -106,7 +106,7 @@
        (Files/exists (expand x (:no-tilde opts)) (follow (:follow opts))))))
 
 (defn not-exists?
-  "Return true if x can be confirmed not to exist, false otherwise.
+  "Return true if x (a path coercible thing) can be confirmed not to exist, false otherwise.
    This is not a true complement for 'exists?', a false value means we couldn't confirm it doesn't exist.
    This is a wrapper around java.nio.file.Files/notExists().
   Options:
@@ -118,7 +118,7 @@
        (Files/notExists (expand x (:no-tilde opts)) (follow (:follow opts))))))
 
 (defn dir?
-  "Return true if x exists and is a directory, false otherwise.
+  "Return true if x (a path coercible thing) exists and is a directory, false otherwise.
    This is a wrapper around java.nio.file.Files/isDirectory().
   Options:
     :follow true/false, whether or not to follow symbolic link if x is a link.
@@ -129,7 +129,8 @@
        (Files/isDirectory (expand x (:no-tilde opts)) (follow (:follow opts))))))
 
 (defn file?
-  "Return true if x exists and is a regular file (non-symbolic link, non directory), false otherwise.
+  "Return true if x (a path coercible thing) exists
+   and is a regular file (non-symbolic link, non directory), false otherwise.
    This function WILL follow symbolic link chains unless {:follow false} is specified.
    This is a wrapper around java.nio.file.Files/isRegularFile().
   Options:
@@ -141,7 +142,7 @@
        (Files/isRegularFile (expand x (:no-tilde opts)) (follow (:follow opts))))))
 
 (defn link?
-  "Return true if x exists and is a symbolic link, false otherwise.
+  "Return true if x (a path coercible thing) exists and is a symbolic link, false otherwise.
    This is a wrapper around java.nio.file.Files/isSymbolicLink().
    Whether it follows symbolic links is undocumented.
   Options:
@@ -152,7 +153,7 @@
        (Files/isSymbolicLink (expand x (:no-tilde opts))))))
 
 (defn exe?
-  "Return true if x exists and whether the jvm can execute the file, false otherwise.
+  "Return true if x (a path coercible thing) exists and the jvm can execute the file, false otherwise.
    This is a wrapper around java.nio.file.Files/isExecutable().
    Whether it follows symbolic links is undocumented.
   Options:
@@ -163,7 +164,7 @@
        (Files/isExecutable (expand x (:no-tilde opts))))))
 
 (defn hidden?
-  "Return true if x exists and is considered hidden, false otherwise.
+  "Return true if x (a path coercible thing) exists and is considered hidden, false otherwise.
    This is a wrapper around java.nio.file.Files/isHidden().
    Whether it follows symbolic links is undocumented.
   Options:
@@ -174,7 +175,7 @@
        (Files/isHidden (expand x (:no-tilde opts))))))
 
 (defn readable?
-  "Return true if x exists and is readable, false otherwise.
+  "Return true if x (a path coercible thing) exists and is readable, false otherwise.
    This is a wrapper around java.nio.file.Files/isReadable().
    Whether it follows symbolic links is undocumented.
   Options:
@@ -185,7 +186,7 @@
        (Files/isReadable (expand x (:no-tilde opts))))))
 
 (defn writable?
-  "Return true if x exists and is writable, false otherwise.
+  "Return true if x (a path coercible thing) exists and is writable, false otherwise.
    This is a wrapper around java.nio.file.Files/isWritable().
    Whether it follows symbolic links is undocumented.
   Options:
@@ -195,3 +196,39 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (Files/isWritable (expand x (:no-tilde opts))))))
 
+;;
+;; Two path predicates: (pred path1 path2 optionmap)
+;;
+
+(defn same-file?
+  "Return true if two path coercible things represent the same file, false otherwise.
+   This is a wrapper around java.nio.file.Files/isSameFile().
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([p1 p2] (same-file? p1 p2 nil))
+  ([p1 p2 opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)
+           no-tilde (:no-tilde opts)]
+       (Files/isSameFile (expand p1 no-tilde) (expand p2 no-tilde)))))
+
+;;
+;; File Accessors: access information about a given file identified by a path.
+;;
+
+;; getAttribute()
+;; getFileAttributeView() ?
+;; getLastModifiedTime()
+;; getFileStore()
+;; getOwner() 
+;; getPosixFilePermissions()
+;; probeContentType()
+;; readAllBytes()
+;; readAllLines()
+;; readAttributes() ? (two signatures)
+;; readSymbolicLink()
+;; size() 
+
+
+;;
+;; File mutators (creation, deletion, copies, updates, attributes, etc)
+;;

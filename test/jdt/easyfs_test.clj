@@ -7,6 +7,11 @@
   (testing "FIXME, I fail."
     (is (= 0 1))))
 
+
+;;; Figure out how to use fixtures to set up some special files for tesitng
+;;; (setup/teardown infrastructure for this type of testing)
+
+
 (deftest test-exists
   (testing "exists? and not-exists?"
     (assert (exists? "~"))
@@ -46,3 +51,8 @@
     (assert (writable? "~/.bashrc"))))
 ;; *TODO*: test case where file isn't writable, need a chmod or something for that
 
+(deftest test-same-file
+  (testing "same-file?"
+    (assert (same-file? "~/.bashrc" "/home/./dave/.bashrc"))
+    (assert (not (same-file? "~/.bashrc" "~/clojure")))))
+            
