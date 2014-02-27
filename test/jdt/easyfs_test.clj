@@ -56,3 +56,5 @@
     (assert (same-file? "~/.bashrc" "/home/./dave/.bashrc"))
     (assert (not (same-file? "~/.bashrc" "~/clojure")))))
             
+;; *TODO*: test these: owner, group, ctime, mtime, atime, key, size, file-store,
+;; perm-keys, perm-string, content-type, read-bytes, read-lines, read-symlink

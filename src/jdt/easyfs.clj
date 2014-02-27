@@ -6,6 +6,7 @@
   (:use clojure.java.io)
   (:import java.io.File)
   (:import (java.nio.file Path Files FileSystems FileSystem LinkOption))
+  (:import (java.nio.file.attribute PosixFilePermissions))
   (:import java.nio.charset.Charset)
   )
 
@@ -211,24 +212,209 @@
            no-tilde (:no-tilde opts)]
        (Files/isSameFile (expand p1 no-tilde) (expand p2 no-tilde)))))
 
+
 ;;
 ;; File Accessors: access information about a given file identified by a path.
 ;;
+;; We may want a (with-attributes ...) macro for reading/writing attributes in bulk operations
+;; using java AttributeView interfaces.  
+;;
+;; On Linux, (supported-file-attribute-views) => (basic owner user unix dos posix)
 
-;; getAttribute()
-;; getFileAttributeView() ?
-;; getLastModifiedTime()
-;; getFileStore()
-;; getOwner() 
-;; getPosixFilePermissions()
-;; probeContentType()
-;; readAllBytes()
-;; readAllLines()
+(defn owner
+  "Return a string naming the owner of the file, or nil if the owner information is unavailable.
+   The file must exist or an exception is thrown.
+   This is a wrapper around java.nio.file.Files/getOwner().
+  Options:
+    :follow true/false, whether or not to follow symbolic link if x is a link.
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (owner x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (.getName (Files/getOwner (expand x (:no-tilde opts)) (follow (:follow opts)))))))
+
+(defn group
+  "Return a string naming the owner of the file, or nil if the owner information is unavailable.
+   The file must exist or an exception is thrown.
+   This is a wrapper around java.nio.file.Files/getAttribute().
+  Options:
+    :follow true/false, whether or not to follow symbolic link if x is a link.
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (group x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (.getName (Files/getAttribute (expand x (:no-tilde opts)) "posix:group" (follow (:follow opts)))))))
+
+(defn ctime
+  "Return a FileTime with the creation modification time of the file.
+   The file must exist or an exception is thrown.
+   This is a wrapper around java.nio.file.Files/getAttribute().
+  Options:
+    :follow true/false, whether or not to follow symbolic link if x is a link.
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (ctime x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/getAttribute (expand x (:no-tilde opts)) "unix:creationTime" (follow (:follow opts))))))
+
+(defn mtime 
+  "Return a FileTime with the last modification time of the file.
+   The file must exist or an exception is thrown.
+   This is a wrapper around java.nio.file.Files/getLastModifiedTime().
+  Options:
+    :follow true/false, whether or not to follow symbolic link if x is a link.
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (mtime x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/getLastModifiedTime (expand x (:no-tilde opts)) (follow (:follow opts))))))
+
+(defn atime 
+  "Return a FileTime with the last access time of the file.
+   The file must exist or an exception is thrown.
+   This is a wrapper around java.nio.file.Files/getLastModifiedTime().
+  Options:
+    :follow true/false, whether or not to follow symbolic link if x is a link.
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (atime x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/getAttribute (expand x (:no-tilde opts)) "unix:lastAccessTime" (follow (:follow opts))))))
+
+(defn key
+  "Return an object that uniquely identifies a file (an inode, perhaps), or nil if no key can be obtained.
+   The file must exist or an exception is thrown.
+   This is a wrapper around java.nio.file.Files/getAttribute().
+  Options:
+    :follow true/false, whether or not to follow symbolic link if x is a link.
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (key x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/getAttribute (expand x (:no-tilde opts)) "unix:fileKey" (follow (:follow opts))))))
+
+(defn size
+  "Return the size of a file in bytes. The file must exist or an exception is thrown.
+   This is a wrapper around java.nio.file.Files/size().
+   Whether it follows symbolic links is undocumented.
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (size x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/size (expand x (:no-tilde opts))))))
+
+(defn file-store
+  "Return the FileStore associated with a file. The file must exist or an exception is thrown.
+   This is a wrapper around java.nio.file.Files/getFileStore().
+   Whether it follows symbolic links is undocumented.
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (file-store x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/getFileStore (expand x (:no-tilde opts))))))
+
+(defn perm-keys
+  "Return a set of PosixFilePermission-like keywords (e.g. :GROUP_READ) for file permissions.
+   The file must exist or an exception is thrown.  Remember clojure keywords are case sensitive.
+   This is a wrapper around java.nio.file.Files/getPosixFilePermissions().
+  Options:
+    :follow true/false, whether or not to follow symbolic link if x is a link.
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (perm-keys x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (into #{}
+             (map (fn [perm] (keyword (str perm)))
+                  (Files/getPosixFilePermissions (expand x (:no-tilde opts)) (follow (:follow opts))))))))
+
+(defn perm-string
+  "Return a unix style string of file permissions, e.g. \"rwxr-xr-x\" for a file.
+   The file must exist or an exception is thrown. 
+   This is a wrapper around java.nio.file.Files/getPosixFilePermissions().
+  Options:
+    :follow true/false, whether or not to follow symbolic link if x is a link.
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (perm-string x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (PosixFilePermissions/toString
+        (Files/getPosixFilePermissions (expand x (:no-tilde opts)) (follow (:follow opts)))))))
+
+(defn content-type
+  "Return a string describing content type of the file or null if the type can't be detected.
+   This method may probe content and therefore be slow.
+   The file must exist or an exception is thrown. 
+   This is a wrapper around java.nio.file.Files/probeContentType().
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (content-type x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/probeContentType (expand x (:no-tilde opts))))))
+
+(defn read-bytes
+  "Return a (mutable) Java byte array (i.e. byte[], not Byte[]) of file content.
+   The file must exist or an exception is thrown. 
+   This is a wrapper around java.nio.file.Files/readAllBytes().
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (read-bytes x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/readAllBytes (expand x (:no-tilde opts))))))
+
+(defn read-lines
+  "Return a (mutable, NOT LAZY) list of strings representing file content.
+
+   *TODO*: think about making this a lazy sequence instead of a wrapper for readAllLines(),
+   which is just too opposite the goals of clojure to expose.  
+ 
+   The file must exist or an exception is thrown. 
+   This is a wrapper around java.nio.file.Files/readAllLines().
+  Options:
+    :encoding a string or Charset that represents the desired encoding, defaults to UTF-8.
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (read-lines x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/readAllLines (expand x (:no-tilde opts)) (encoding (:encoding opts))))))
+
+(defn read-symlink
+  "Return a Path that represents the target of a symbolic link.
+   The file must exist AND be a symbolic link or an exception is thrown. 
+   This is a wrapper around java.nio.file.Files/readSymbolicLink().
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (read-symlink x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/readSymbolicLink (expand x (:no-tilde opts))))))
+
 ;; readAttributes() ? (two signatures)
-;; readSymbolicLink()
-;; size() 
+
+;; Probably want some accessors not in Files.java
+;; (parent p), (file-children p) (dir-children p) (children-p) ... just convenience methods
+;; but not one for recursive children (unless it's a lazy seq of course, and this is what find or dir-seq
+;; are for.
+
+;; For FileAttributeView stuff, probably best to have a (with-file-attributes ...) macro of some kind
+;; to read and write the different properties.
 
 
 ;;
 ;; File mutators (creation, deletion, copies, updates, attributes, etc)
 ;;
+
+
+
+;;
+;; File/FileSystem miscellaneous
+;;
+
+(defn supported-file-attribute-views
+  "Return the supported FileAttributeView names (strings) that can be used with Files.getAttributes()
+  and similar functions on this platform.  If no FileSystem is specified, use the default FileSystem."
+  ([] (supported-file-attribute-views default-fs))
+  ([file-system] (seq (.supportedFileAttributeViews file-system))))
