@@ -281,14 +281,14 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (Files/getAttribute (expand x (:no-tilde opts)) "unix:lastAccessTime" (follow (:follow opts))))))
 
-(defn key
+(defn file-key
   "Return an object that uniquely identifies a file (an inode, perhaps), or nil if no key can be obtained.
    The file must exist or an exception is thrown.
    This is a wrapper around java.nio.file.Files/getAttribute().
   Options:
     :follow true/false, whether or not to follow symbolic link if x is a link.
     :no-tilde true/false, whether or not to do tilde expansion."
-  ([x] (key x nil))
+  ([x] (file-key x nil))
   ([x opts]
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (Files/getAttribute (expand x (:no-tilde opts)) "unix:fileKey" (follow (:follow opts))))))
