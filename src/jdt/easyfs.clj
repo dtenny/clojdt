@@ -56,7 +56,11 @@
    :no-tilde "if true do not perform Bash style tilde expansion in pathnames, default false"
    :follow   "if true, follow Symbolic links, otherwise do not follow them, default true"
    :accept   "predicate of one argument, a path, return true if path should be kept, false if discarded,
-             default: none"
+             default: none.  Mutually exclusive with :glob."
+   :glob     "A string specifying a globbing pattern as documented in 
+             documented in java.nio.file.FileSystem.getPathMatcher() or nil/absent.  Default: none.
+             Mutually exclusive with :accept.  An exception is thrown if the pattern is invalid.
+             Globbing is case sensitive on the default Linux filesystem."
    })
 
 (def                                    ;defonce
@@ -66,6 +70,13 @@
   default-option-values
   {:encoding (encoding "UTF-8")
    :follow true})
+
+(defn- check-options "Check map of options (or nil) for constraints independent of intended usage context."
+  [options]
+  (when options
+    (let [glob (:glob options) accept (:accept options)]
+      (if (and glob accept)
+        (throw (Exception. ":glob and :accept are mutually exlusive options."))))))
 
 ;; Path Transformations
 (defn ^Path expand [x suppress-tilde]
@@ -426,6 +437,10 @@
                            (.close dir-stream)))]
        (lazy-seq (iterator-fn)))))
 
+;; *TODO*: want a :regex option for globbing, but need to implement it with with our own
+;; DirectoryStream.Filter (probably makes more sense) or with the walkFileTree()+Visitor API.
+;; *TODO*: Allow globbing and accept?  Why not, just stack em by wrapping the accept fn,
+;; The check-options method will have to change.
 (defn ^DirectoryStream directory-stream
   "Return a DirectoryStream on a path-coercible spec.
    An exception is thrown if the path spec does not specify a directory.
@@ -435,17 +450,23 @@
   Options:
     :accept f, species a predicate 'f' that takes a path argument, and returns logical true if the the path
                should be included in the result, and logical false if the path should not be in the result.
+               Mutually exclusive with :glob.
+    :glob pattern or nil, return only those files that match the specified globbing pattern as
+          documented in java.nio.file.FileSystem.getPathMatcher().  Default is nil.
+          Mutually exclusive with :accept.  An exception is thrown if the pattern is invalid.
+          Globbing is case sensitive on the default Linux filesystem.
     :no-tilde true/false, whether or not to do tilde expansion."
   ([x] (directory-stream x nil))
   ([x opts]
      (let [opts (if opts (merge default-option-values opts) default-option-values)
            dir (expand x (:no-tilde opts))
-           accept-fn (:accept opts)]
-       (if accept-fn
-         (Files/newDirectoryStream
-          dir (proxy [DirectoryStream$Filter] [] (accept [path] (accept-fn path))))
-         (Files/newDirectoryStream dir)))))
-
+           accept-fn (:accept opts)
+           glob (:glob opts)]
+       (check-options opts)
+       (cond accept-fn (Files/newDirectoryStream
+                        dir (proxy [DirectoryStream$Filter] [] (accept [path] (accept-fn path))))
+             glob (Files/newDirectoryStream dir glob)
+             :else (Files/newDirectoryStream dir)))))
 
 (defn children
   "A DirectoryStream interface that returns a lazy sequence of all children in a directory.
@@ -455,12 +476,17 @@
   Options:
     :accept f, species a predicate 'f' that takes a path argument, and returns logical true if the the path
                should be included in the result, and logical false if the path should not be in the result.
+               Mutually exclusive with :glob.
+    :glob pattern or nil, return only those files that match the specified globbing pattern as
+          documented in java.nio.file.FileSystem.getPathMatcher().  Default is nil.
+          Mutually exclusive with :accept.  An exception is thrown if the pattern is invalid.
     :no-tilde true/false, whether or not to do tilde expansion."
   ([x] (children x nil))
   ([x opts]
      (if-let [directory-stream (directory-stream x opts)]
        (directory-stream-seq directory-stream))))
 
+;; *TODO*: Allow globbing and :acccept with this method, our accept just wraps caller's accept.
 (defn file-children
   "Return a lazy sequence of paths that are children of a directory for which 'file?' is true.
    An exception is thrown if the path spec does not specify a directory.
@@ -472,6 +498,7 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (children (expand x (:no-tilde opts)) (merge opts {:accept file?})))))
 
+;; *TODO*: Allow globbing and :acccept with this method, our accept just wraps caller's accept.
 (defn dir-children
   "Return a lazy sequence of paths that are children of a directory for which 'dir?' is true.
    An exception is thrown if the path spec does not specify a directory.

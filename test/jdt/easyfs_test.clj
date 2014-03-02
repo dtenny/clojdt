@@ -63,8 +63,9 @@
     (assert (= (.startsWith (jdt.easyfs/to-path "~/foo" {:no-tilde true}) "~")))))
     
 (deftest test-children
-  (testing "children"
-    (assert (instance? java.nio.file.Path (first (children "~"))))))
+  (testing "children and glob"
+    (assert (instance? java.nio.file.Path (first (children "~"))))
+    (is (= 1 (count (children "~" {:glob "*.bashrc"}))))))
 
 (deftest test-bogus-dirspec
   (testing "bogus dirspec"
