@@ -18,14 +18,14 @@
 ;; and convert from strings to symbols.
 (defmulti defined? 
   "True if symbol is defined in namespace, untrue otherwise"
-  (fn [ & args ] (map class args)))
+  (fn [ & args ] (mapv class args)))
 (defmethod defined? [clojure.lang.Symbol] [name] (get (ns-map *ns*) name))
 (defmethod defined? [clojure.lang.Symbol clojure.lang.Namespace] [name ns] (get (ns-map ns) name))
 (defmethod defined? [java.lang.String] [name] (defined? (symbol name)))
 (defmethod defined? [java.lang.String clojure.lang.Namespace] [name ns] (defined? (symbol name) ns))
 
 (defn undef
-  "Opposite of def, remove name from namepsace map (defaults to *ns*).
+  "Opposite of def, remove name (a string or symbol) from namepsace map (defaults to *ns*).
    Return true if the symbol was undefined, false if it was not."
   ;; ns-unmap always returns false, correct for it.
   ([name] (and (defined? name *ns*) (do (ns-unmap *ns* name) (not (defined? name *ns*)))))

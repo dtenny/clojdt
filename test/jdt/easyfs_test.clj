@@ -56,5 +56,21 @@
     (assert (same-file? "~/.bashrc" "/home/./dave/.bashrc"))
     (assert (not (same-file? "~/.bashrc" "~/clojure")))))
             
-;; *TODO*: test these: owner, group, ctime, mtime, atime, key, size, file-store,
-;; perm-keys, perm-string, content-type, read-bytes, read-lines, read-symlink
+(deftest test-to-path
+  (testing "to-path"
+    (assert (= (jdt.easyfs/to-path "~/foo") (jdt.easyfs/expand "~/foo" nil)))
+    (assert (= (.startsWith (jdt.easyfs/to-path "~/foo" {:no-tilde true}) "~")))))
+    
+(deftest test-children
+  (testing "children"
+    (assert (instance? java.nio.file.Path (first (children "~"))))
+    (assert (nil? (children "~" {:no-tilde true})))))
+
+(deftest test-accept
+  (testing ":accept"
+    (assert (< (count (children "~" {:accept #(not (hidden? %))}))
+               (count (children "~"))))))
+
+;; *TODO*: test these: owner, group, ctime, mtime, atime, file-key, size, file-store,
+;; perm-keys, perm-string, content-type, read-bytes, read-lines, read-symlink,
+;; children

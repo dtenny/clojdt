@@ -1,11 +1,15 @@
 (ns jdt.easyfs
-  "Clojure functions for easy file system manipulation. Requires Java 7."
+  "Clojure functions for easy file system manipulation. Requires Java 7.
+   Most everything in this module coerces arguments to java.nio.files.Path, and returns Path objects.
+   By default, shell-like tilde expansion is also enabled on inputs to these APIs."
   (:use jdt.core)
   (:use [jdt.shell :only [bash-tilde-expansion]])
   (:use [jdt.closer :only [ensure-close]])
   (:use clojure.java.io)
   (:import java.io.File)
-  (:import (java.nio.file Path Files FileSystems FileSystem LinkOption))
+  (:import java.net.URI)
+  (:import (java.nio.file DirectoryStream DirectoryStream$Filter
+                          Files FileSystems FileSystem LinkOption Path))
   (:import (java.nio.file.attribute PosixFilePermissions))
   (:import java.nio.charset.Charset)
   )
@@ -14,7 +18,7 @@
 (defonce ^{:doc "Default FileSystem file name separator"} filename-seperator (.getSeparator default-fs))
 (defonce ^{:private true}  empty-string-array (into-array String [])) ; for getPath
 
-(defn- seq-to-path
+(defn- ^Path seq-to-path
   "Convert sequence of things to a path, where each element of sequence is element of path."
   [x]
   (let [seqtypes (into #{} (map class x))
@@ -25,7 +29,7 @@
           (.getPath default-fs (first x) (into-array String (rest x)))
           :else (throw (Exception. (str "Can't unable input of type " first-type " for: " x))))))
 
-(defmulti ^Path as-path "Coerce object to Path" class)
+(defmulti ^Path as-path "Coerce object to Path. Does not perform tilde expansion. See also 'to-path'." class)
 (defmethod ^Path as-path String [x] (.getPath default-fs x empty-string-array))
 (defmethod ^Path as-path File [x] (.toPath x))
 (defmethod ^Path as-path Path [x] x)  
@@ -46,12 +50,14 @@
 (def                                    ;defonce
   ^{:doc
     "Keys representing options recognized in this module.
-     Not all functions take all options."}
+     Not all functions take all options.  This variable is for documentation purposes."}
   valid-option-keys
-  [:encoding                            ;string or Charset, converted to charset
-   :no-tilde                            ;true/false, no conversion
-   :follow                              ;true/false, converted to LinkOption array
-   ])
+  {:encoding "string or Charset, converted to charset, specifying byte<->char encodings, default UTF-8"
+   :no-tilde "if true do not perform Bash style tilde expansion in pathnames, default false"
+   :follow   "if true, follow Symbolic links, otherwise do not follow them, default true"
+   :accept   "predicate of one argument, a path, return true if path should be kept, false if discarded,
+             default: none"
+   })
 
 (def                                    ;defonce
   ^{:doc
@@ -62,12 +68,12 @@
    :follow true})
 
 ;; Path Transformations
-(defn- expand [x suppress-tilde]
+(defn ^Path expand [x suppress-tilde]
   "Ensure that argument is coerced to a path,
   tilde-expanded if necessary unless suppress-tilde is true.
   Only string arguments can be tilde exapnded."
   (cond (instance? Path x)
-        x
+        x                               ;*TODO* (as-path "~/.bashrc") works, we should figure out how to expand it here.
         (and (string? x) (not suppress-tilde))
         (as-path (bash-tilde-expansion x))
         :else (as-path x)))
@@ -392,7 +398,70 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (Files/readSymbolicLink (expand x (:no-tilde opts))))))
 
-;; readAttributes() ? (two signatures)
+;; *TBD* readAttributes()
+
+
+;;
+;; DirectoryStream APIs.
+;;
+;; All DirectoryStream wrappers work in terms of lazy sequences.  To proactively close partially traversed
+;; directory stream iterators, you should wrap the calls in with-open, but if you don't the DirectoryStream
+;; will be closed when the iterator encounters the last element or the DirectoryStream is GC'd.
+;; 
+
+(defn- directory-stream-seq
+  "Returns a lasy sequence of Paths respresenting children of a directory via the DirectoryStream API.
+   Ensures that the underlying DirectoryStream is closed either when the iterator reaches the last element
+   (a proactive close), or when the DirectoryStream is garbage collected. (a lazy close).
+   The most proactive way to close the underlying DirectoryStream is to wrap the
+   scope of the DirectoryStream and lazy sequence realization in a 'with-open'."
+  ;; The no-filter variant
+  ([^DirectoryStream dir-stream]
+     (ensure-close dir-stream)          ;will close when GC'd
+     (let [iterator (.iterator dir-stream)
+           iterator-fn (fn iterator-fn []
+                         (if (.hasNext iterator)
+                           (cons (.next iterator)
+                                 (lazy-seq (iterator-fn)))
+                           (.close dir-stream)))]
+       (lazy-seq (iterator-fn)))))
+
+(defn ^DirectoryStream directory-stream
+  "Return a DirectoryStream on a path-coercible spec or nil if the path spec doesn't represent a directory.
+  Note that the nil return on a non-directory is unlike the java interface which would throw an exception.
+  Consider using 'children' or other functions instead, which wrap DirectoryStream objects in close-safe
+  and lazy sequences.
+  Options:
+    :accept f, species a predicate 'f' that takes a path argument, and returns logical true if the the path
+               should be included in the result, and logical false if the path should not be in the result.
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (directory-stream x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)
+           dir (expand x (:no-tilde opts))
+           accept-fn (:accept opts)]
+       (when (dir? dir)
+         (if accept-fn
+           (Files/newDirectoryStream
+            dir (proxy [DirectoryStream$Filter] [] (accept [path] (accept-fn path))))
+           (Files/newDirectoryStream dir))))))
+
+
+(defn children
+  "A DirectoryStream interface that returns a lazy sequence of all children in a directory.
+   If the input pathspec is not a directory or has no children returns nil.
+   (this is more forgiving than the newDirectoryStream() java method that throws an exception in the caes
+   of a non-directory input).
+   The resulting sequence will not contain any pseudo paths such as '.' or '..',
+   but may include hidden files.  See also 'parent'.
+  Options:
+    :accept f, species a predicate 'f' that takes a path argument, and returns logical true if the the path
+               should be included in the result, and logical false if the path should not be in the result.
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (children x nil))
+  ([x opts]
+     (if-let [directory-stream (directory-stream x opts)]
+       (directory-stream-seq directory-stream))))
 
 ;; Probably want some accessors not in Files.java
 ;; (parent p), (file-children p) (dir-children p) (children-p) ... just convenience methods
@@ -410,7 +479,7 @@
 
 
 ;;
-;; File/FileSystem miscellaneous
+;; FileSystem APIs
 ;;
 
 (defn supported-file-attribute-views
@@ -418,3 +487,104 @@
   and similar functions on this platform.  If no FileSystem is specified, use the default FileSystem."
   ([] (supported-file-attribute-views default-fs))
   ([file-system] (seq (.supportedFileAttributeViews file-system))))
+
+
+
+;;
+;; Path APIs
+;;
+;; The Path interface is pretty easy to use, there's *almost* no point in wrapping it.
+;; It might be useful to wrap it such that the returns are strings for predicate usage,
+;; but "=" invokes equals() on Path objects just as easily as Strings.
+;;
+;; Still we get tilde expansion and string conversion to path arguments, that makes the user's
+;; life easier, and that's what this module is about.  Our method names are generally shorter too.
+;;
+;; Path has a lot of methods, most of them are omitted here, use them directly if you need to.
+;; What is here is mostly with an eye toward (unix-like) 'find' functionality.
+;;
+
+(defn ^Path parent
+  "Return the parent path of a file or nil if there is no parent.
+   Does not normalize path components such as '.' or '..', call normalize() if you need that done.
+   If you want a string representation of the path instead of a Path instance, call 'str' on the result.
+   This is a wrapper around java.nio.file.Path/getParent().
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (parent x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (.getParent (expand x (:no-tilde opts))))))
+
+(defn ^Path file-name
+  "Return the file name (i.e. last component of the path) as a Path. (Use 'str' to get a string).
+   This is a wrapper around java.nio.file.Path/getFileName().
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (file-name x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (.getFileName (expand x (:no-tilde opts))))))
+
+(defn absolute?
+  "Return true if the path is absolute, false otherwise.
+   This is a wrapper around java.nio.file.Path/isAbsolute().
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (absolute? x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (.isAbsolute (expand x (:no-tilde opts))))))
+
+(defn ^Path normalize  
+  "Return a path with redundant elements (such as '.') eliminated.
+   This is a wrapper around java.nio.file.Path/normalize().
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (normalize x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (.normalize (expand x (:no-tilde opts))))))
+
+(defn ^URI to-uri
+  "Return an URI that represents a path.
+   This is a wrapper around java.nio.file.Path/toUri().
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (to-uri x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (.toUri (expand x (:no-tilde opts))))))
+
+(defn ^File to-file
+  "Return an File that represents a path.
+   This is a wrapper around java.nio.file.Path/toFile().
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (to-file x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (.toFile (expand x (:no-tilde opts))))))
+
+(defn ^Path to-path
+  "Coerce input to a path.  This wraps 'as-path' in that it knows how to observe some options
+   like most of the other APIs in this module, including default behavior for tilde expansion.
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (to-path x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (let [no-tilde (:no-tilde opts)]
+         (if (string? x)
+           (as-path (expand x no-tilde))
+           (if (instance? Path x)
+             (if (.startsWith x "~")
+               (expand (str x) no-tilde)
+               x)
+             (as-path x)))))))
+
+
+(extend-protocol Coercions
+  Path
+  (as-url [p] (.toUri p))
+  (as-file [p] (.toFile p)))

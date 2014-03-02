@@ -36,7 +36,7 @@
   (while true
     (let [reference (.remove reference-queue)
           obj (.get referent-field reference)]
-      (println "process-queue: got one!" reference obj)
+      ;;(println "process-queue: got one!" reference obj)
       (try
         (when (instance? java.io.Flushable obj)
           (try
