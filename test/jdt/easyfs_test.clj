@@ -1,6 +1,7 @@
 (ns jdt.easyfs-test
   (:require [clojure.test :refer :all]
-            [jdt.easyfs :refer :all]))
+            [jdt.easyfs :refer :all])
+  (:import java.nio.file.NotDirectoryException))
 
 #_
 (deftest a-test
@@ -63,14 +64,29 @@
     
 (deftest test-children
   (testing "children"
-    (assert (instance? java.nio.file.Path (first (children "~"))))
-    (assert (nil? (children "~" {:no-tilde true})))))
+    (assert (instance? java.nio.file.Path (first (children "~"))))))
+
+(deftest test-bogus-dirspec
+  (testing "bogus dirspec"
+    ;; If we disallow non-directory specs to directory stream wrappers
+    (is (thrown? NotDirectoryException (children "~/.bashrc")))
+    ;; If we allow non-directory specs to directory stream wrappers
+    #_(is (empty? (children "~/.bashrc")))
+    ))
 
 (deftest test-accept
-  (testing ":accept"
+  (testing "(children x {:accept fn})"
     (assert (< (count (children "~" {:accept #(not (hidden? %))}))
                (count (children "~"))))))
 
+(deftest test-file-children
+  (testing "file-children"
+    (assert (not (some dir? (file-children "~"))))))
+
+(deftest test-dir-children
+  (testing "dir-children"
+    (assert (not (some file? (dir-children "~"))))))
+
 ;; *TODO*: test these: owner, group, ctime, mtime, atime, file-key, size, file-store,
 ;; perm-keys, perm-string, content-type, read-bytes, read-lines, read-symlink,
-;; children
+

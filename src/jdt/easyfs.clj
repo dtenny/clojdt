@@ -427,10 +427,11 @@
        (lazy-seq (iterator-fn)))))
 
 (defn ^DirectoryStream directory-stream
-  "Return a DirectoryStream on a path-coercible spec or nil if the path spec doesn't represent a directory.
-  Note that the nil return on a non-directory is unlike the java interface which would throw an exception.
-  Consider using 'children' or other functions instead, which wrap DirectoryStream objects in close-safe
-  and lazy sequences.
+  "Return a DirectoryStream on a path-coercible spec.
+   An exception is thrown if the path spec does not specify a directory.
+   This is a wrapper around java.nio.file.Files.newDirectoryStream().
+   Consider using 'children' or other functions instead, which wrap DirectoryStream objects in close-safe
+   and lazy sequences.
   Options:
     :accept f, species a predicate 'f' that takes a path argument, and returns logical true if the the path
                should be included in the result, and logical false if the path should not be in the result.
@@ -440,18 +441,15 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)
            dir (expand x (:no-tilde opts))
            accept-fn (:accept opts)]
-       (when (dir? dir)
-         (if accept-fn
-           (Files/newDirectoryStream
-            dir (proxy [DirectoryStream$Filter] [] (accept [path] (accept-fn path))))
-           (Files/newDirectoryStream dir))))))
+       (if accept-fn
+         (Files/newDirectoryStream
+          dir (proxy [DirectoryStream$Filter] [] (accept [path] (accept-fn path))))
+         (Files/newDirectoryStream dir)))))
 
 
 (defn children
   "A DirectoryStream interface that returns a lazy sequence of all children in a directory.
-   If the input pathspec is not a directory or has no children returns nil.
-   (this is more forgiving than the newDirectoryStream() java method that throws an exception in the caes
-   of a non-directory input).
+   An exception is thrown if the path spec does not specify a directory.
    The resulting sequence will not contain any pseudo paths such as '.' or '..',
    but may include hidden files.  See also 'parent'.
   Options:
@@ -463,10 +461,32 @@
      (if-let [directory-stream (directory-stream x opts)]
        (directory-stream-seq directory-stream))))
 
-;; Probably want some accessors not in Files.java
-;; (parent p), (file-children p) (dir-children p) (children-p) ... just convenience methods
-;; but not one for recursive children (unless it's a lazy seq of course, and this is what find or dir-seq
-;; are for.
+(defn file-children
+  "Return a lazy sequence of paths that are children of a directory for which 'file?' is true.
+   An exception is thrown if the path spec does not specify a directory.
+   Return nil if there aren't any children.
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (file-children x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (children (expand x (:no-tilde opts)) (merge opts {:accept file?})))))
+
+(defn dir-children
+  "Return a lazy sequence of paths that are children of a directory for which 'dir?' is true.
+   An exception is thrown if the path spec does not specify a directory.
+   Return nil if there aren't any children.
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (dir-children x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (children (expand x (:no-tilde opts)) (merge opts {:accept dir?})))))
+
+;; *FINISH*: some glob interface to the above listers, including DirectoryStream(Path, String glob)
+;; :glob option to above?  :regex option? (mutually exclusive with glob?)
+;; allowing glob/regex options is more flexible that the java api that only takes a glob for
+;; newDirectoryStream().
 
 ;; For FileAttributeView stuff, probably best to have a (with-file-attributes ...) macro of some kind
 ;; to read and write the different properties.
