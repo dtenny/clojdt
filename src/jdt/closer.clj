@@ -1,6 +1,8 @@
 (ns
     ^{:doc "Wrap java.io.Closeable objects in a machanism that will eventually ensure they're closed."}
   jdt.closer
+  (:require clojure.repl)
+  (:require clojure.java.shell)
   (import java.io.Closeable)
   (import java.util.Vector)
   (import [java.lang.ref PhantomReference ReferenceQueue]))
@@ -72,7 +74,7 @@
     (println "test1b:" @close-count (clojure.java.shell/sh "ls"  "-l" "/tmp/foo"))))
 
 (defn ctest []
-  (jdt.shell/rm "/tmp/foo")
+  (clojure.java.shell/sh "rm" "/tmp/foo")
   (let [count @close-count]
     (ctest1)
     (dotimes [i 10] (System/gc))
