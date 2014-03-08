@@ -15,6 +15,13 @@
   (:import java.nio.charset.Charset)
   )
 
+(let [java-version-string (System/getProperty "java.version")
+      major-minor-substring (second (re-find #"(\d+\.\d+)\." java-version-string))]
+  (if (< (read-string major-minor-substring) 1.7)
+    (throw (Exception. (str (ns-name *ns*)
+                            " is only compatible with java versions >= 1.7, you are running version "
+                            java-version-string)))))
+
 (defonce ^{:doc "Default FileSystem"} default-fs (FileSystems/getDefault))
 (defonce ^{:doc "Default FileSystem file name separator"} filename-seperator (.getSeparator default-fs))
 (defonce ^{:private true}  empty-string-array (into-array String [])) ; for getPath
