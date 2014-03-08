@@ -33,3 +33,15 @@
            {:boring [(*lines* 5)] :sleeping [(*lines* 0)]}))))
     
     
+(deftest test-merge-predicates
+  (testing "merge-predicates"
+    (let [pred (merge-predicates even? pos?)]
+      (is (pred 2))
+      (is (not (pred 1)))
+      (is (not (pred -2))))
+    (let [pred (merge-predicates even? false nil true)]
+      (is (pred 2))
+      (is (not (pred 1))))
+    (is (nil? (merge-predicates :foo nil)))))
+          
+

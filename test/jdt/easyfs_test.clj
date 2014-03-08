@@ -65,7 +65,11 @@
 (deftest test-children
   (testing "children and glob"
     (assert (instance? java.nio.file.Path (first (children "~"))))
-    (is (= 1 (count (children "~" {:glob "*.bashrc"}))))))
+    (is (= 1 (count (children "~" {:glob "*.bashrc"}))))
+    (is (= 1 (count (children "~" {:regex ".*\\.bashrc$"}))))
+    ;; combining two options for filtering, filtering among the .b* files the hard way
+    (is (= 1 (count (children "~" {:accept (fn [p] (.startsWith (str (.getFileName p)) ".b"))
+                     :regex ".*rc$"}))))))
 
 (deftest test-bogus-dirspec
   (testing "bogus dirspec"
@@ -82,7 +86,13 @@
 
 (deftest test-file-children
   (testing "file-children"
-    (assert (not (some dir? (file-children "~"))))))
+    (assert (not (some dir? (file-children "~"))))
+    ;; match .bashrc the hard way, 3 of our own predicates basically, plus the implicit file? predicate
+    (is (= 1 (count (file-children "~"
+                                   {:accept (fn [p] (.startsWith (str (.getFileName p)) ".b"))
+                                    :regex ".*ash.*"
+                                    :glob "*rc"}))))
+    ))
 
 (deftest test-dir-children
   (testing "dir-children"

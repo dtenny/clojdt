@@ -9,7 +9,8 @@
   (:import java.io.File)
   (:import java.net.URI)
   (:import (java.nio.file DirectoryStream DirectoryStream$Filter
-                          Files FileSystems FileSystem LinkOption Path))
+                          Files FileSystems FileSystem LinkOption Path
+                          PathMatcher))
   (:import (java.nio.file.attribute PosixFilePermissions))
   (:import java.nio.charset.Charset)
   )
@@ -56,11 +57,14 @@
    :no-tilde "if true do not perform Bash style tilde expansion in pathnames, default false"
    :follow   "if true, follow Symbolic links, otherwise do not follow them, default true"
    :accept   "predicate of one argument, a path, return true if path should be kept, false if discarded,
-             default: none.  Mutually exclusive with :glob."
+             default: none."
    :glob     "A string specifying a globbing pattern as documented in 
              documented in java.nio.file.FileSystem.getPathMatcher() or nil/absent.  Default: none.
-             Mutually exclusive with :accept.  An exception is thrown if the pattern is invalid.
+             An exception is thrown if the pattern is invalid.
              Globbing is case sensitive on the default Linux filesystem."
+   :regex    "A string specifying a regex pattern as documented in 
+             documented in java.nio.file.FileSystem.getPathMatcher() or nil/absent.  Default: none.
+             An exception is thrown if the regex is invalid."
    })
 
 (def                                    ;defonce
@@ -70,13 +74,6 @@
   default-option-values
   {:encoding (encoding "UTF-8")
    :follow true})
-
-(defn- check-options "Check map of options (or nil) for constraints independent of intended usage context."
-  [options]
-  (when options
-    (let [glob (:glob options) accept (:accept options)]
-      (if (and glob accept)
-        (throw (Exception. ":glob and :accept are mutually exlusive options."))))))
 
 ;; Path Transformations
 (defn ^Path expand [x suppress-tilde]
@@ -420,6 +417,28 @@
 ;; will be closed when the iterator encounters the last element or the DirectoryStream is GC'd.
 ;; 
 
+(defn glob-accept-fn
+  "Given a PathMatcher or a glob string we can turn into a PathMatcher with syntax 'glob:',
+  return a function that takes one argument, a Path, and returns true if the PathMatcher matches the
+  filename portion of the path and false otherwise.  If the input argument is nil, return nil."
+  [glob]
+  (and glob
+       (let [pm (if (instance? PathMatcher glob)
+                  glob
+                  (.getPathMatcher default-fs (str "glob:" glob)))]
+         (fn [path] (.matches pm (.getFileName path))))))
+
+(defn regex-accept-fn
+  "Given a PathMatcher or a regex string we can turn into a PathMatcher with syntax 'regex:',
+  return a function that takes one argument, a Path, and returns true if the PathMatcher matches the
+  filename portion of the path and false otherwise.   If the input argument is nil, return nil."
+  [regex-or-pm]
+  (and regex-or-pm
+       (let [pm (if (instance? PathMatcher regex-or-pm)
+                  regex-or-pm
+                  (.getPathMatcher default-fs (str "regex:" regex-or-pm)))]
+         (fn [path] (.matches pm (.getFileName path))))))
+
 (defn- directory-stream-seq
   "Returns a lasy sequence of Paths respresenting children of a directory via the DirectoryStream API.
    Ensures that the underlying DirectoryStream is closed either when the iterator reaches the last element
@@ -437,10 +456,10 @@
                            (.close dir-stream)))]
        (lazy-seq (iterator-fn)))))
 
-;; *TODO*: want a :regex option for globbing, but need to implement it with with our own
-;; DirectoryStream.Filter (probably makes more sense) or with the walkFileTree()+Visitor API.
-;; *TODO*: Allow globbing and accept?  Why not, just stack em by wrapping the accept fn,
-;; The check-options method will have to change.
+;; *TODO*: walkFileTree, FileVisitor.visitFile is called with BasicFileAttributes. Overload
+;; our methods that can be derived from BasicFileAttributes to use those instead of looking them up
+;; so we are more efficient.  E.g. size() can be derived directly from the passed BasicFileAttributes
+
 (defn ^DirectoryStream directory-stream
   "Return a DirectoryStream on a path-coercible spec.
    An exception is thrown if the path spec does not specify a directory.
@@ -450,23 +469,27 @@
   Options:
     :accept f, species a predicate 'f' that takes a path argument, and returns logical true if the the path
                should be included in the result, and logical false if the path should not be in the result.
-               Mutually exclusive with :glob.
     :glob pattern or nil, return only those files that match the specified globbing pattern as
           documented in java.nio.file.FileSystem.getPathMatcher().  Default is nil.
-          Mutually exclusive with :accept.  An exception is thrown if the pattern is invalid.
+          An exception is thrown if the pattern is invalid.
           Globbing is case sensitive on the default Linux filesystem.
+    :regex A string specifying a regex pattern or nil/absent.  Default: none.
+          An exception is thrown if the regex is invalid.
     :no-tilde true/false, whether or not to do tilde expansion."
   ([x] (directory-stream x nil))
   ([x opts]
      (let [opts (if opts (merge default-option-values opts) default-option-values)
            dir (expand x (:no-tilde opts))
-           accept-fn (:accept opts)
-           glob (:glob opts)]
-       (check-options opts)
+           accept-fn (merge-predicates (:accept opts)
+                                       (glob-accept-fn (:glob opts))
+                                       (regex-accept-fn (:regex opts)))]
        (cond accept-fn (Files/newDirectoryStream
                         dir (proxy [DirectoryStream$Filter] [] (accept [path] (accept-fn path))))
-             glob (Files/newDirectoryStream dir glob)
              :else (Files/newDirectoryStream dir)))))
+
+;; *TODO*: allow java.util.regex.Pattern objects for :regex as well as strings.
+;; Maybe skip the whole PathMatcher thing in that case, otherwise we have to extract the regex
+;; and create a new pattern indirectly via a path matcher (or create our own regex pathmatcher subtype)
 
 (defn children
   "A DirectoryStream interface that returns a lazy sequence of all children in a directory.
@@ -476,44 +499,54 @@
   Options:
     :accept f, species a predicate 'f' that takes a path argument, and returns logical true if the the path
                should be included in the result, and logical false if the path should not be in the result.
-               Mutually exclusive with :glob.
     :glob pattern or nil, return only those files that match the specified globbing pattern as
           documented in java.nio.file.FileSystem.getPathMatcher().  Default is nil.
-          Mutually exclusive with :accept.  An exception is thrown if the pattern is invalid.
+          An exception is thrown if the pattern is invalid.
+    :regex A string specifying a regex pattern or nil/absent.  Default: none.
+          An exception is thrown if the regex is invalid.
     :no-tilde true/false, whether or not to do tilde expansion."
   ([x] (children x nil))
   ([x opts]
      (if-let [directory-stream (directory-stream x opts)]
        (directory-stream-seq directory-stream))))
 
-;; *TODO*: Allow globbing and :acccept with this method, our accept just wraps caller's accept.
 (defn file-children
-  "Return a lazy sequence of paths that are children of a directory for which 'file?' is true.
+  "Basically a convenience wrapper around 'children' that throws in a 'file?' acceptance predicate.
+   Return a lazy sequence of paths that are children of a directory for which 'file?' is true.
    An exception is thrown if the path spec does not specify a directory.
    Return nil if there aren't any children.
   Options:
+    :accept f, species a predicate 'f' that takes a path argument, and returns logical true if the the path
+               should be included in the result, and logical false if the path should not be in the result.
+    :glob pattern or nil, return only those files that match the specified globbing pattern as
+          documented in java.nio.file.FileSystem.getPathMatcher().  Default is nil.
+          An exception is thrown if the pattern is invalid.
+    :regex A string specifying a regex pattern or nil/absent.  Default: none.
+          An exception is thrown if the regex is invalid.
     :no-tilde true/false, whether or not to do tilde expansion."
   ([x] (file-children x nil))
   ([x opts]
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (children (expand x (:no-tilde opts)) (merge opts {:accept file?})))))
 
-;; *TODO*: Allow globbing and :acccept with this method, our accept just wraps caller's accept.
 (defn dir-children
-  "Return a lazy sequence of paths that are children of a directory for which 'dir?' is true.
+  "Basically a convenience wrapper around 'children' that throws in a 'dir?' acceptance predicate.
+   Return a lazy sequence of paths that are children of a directory for which 'dir?' is true.
    An exception is thrown if the path spec does not specify a directory.
    Return nil if there aren't any children.
   Options:
+    :accept f, species a predicate 'f' that takes a path argument, and returns logical true if the the path
+               should be included in the result, and logical false if the path should not be in the result.
+    :glob pattern or nil, return only those files that match the specified globbing pattern as
+          documented in java.nio.file.FileSystem.getPathMatcher().  Default is nil.
+          An exception is thrown if the pattern is invalid.
+    :regex A string specifying a regex pattern or nil/absent.  Default: none.
+          An exception is thrown if the regex is invalid.
     :no-tilde true/false, whether or not to do tilde expansion."
   ([x] (dir-children x nil))
   ([x opts]
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (children (expand x (:no-tilde opts)) (merge opts {:accept dir?})))))
-
-;; *FINISH*: some glob interface to the above listers, including DirectoryStream(Path, String glob)
-;; :glob option to above?  :regex option? (mutually exclusive with glob?)
-;; allowing glob/regex options is more flexible that the java api that only takes a glob for
-;; newDirectoryStream().
 
 ;; For FileAttributeView stuff, probably best to have a (with-file-attributes ...) macro of some kind
 ;; to read and write the different properties.

@@ -538,3 +538,20 @@
         suffix (if have-dot (.substring filename dot-pos) "")]
     (str prefix "." (filename-friendly-timestamp) suffix)))
 
+(defn merge-predicates
+  "This function takes a set of arguments which should be either
+   1) a predicate, that is, a function of one argument for which 'fn?' is true.
+   2) anything else
+   and combines all predicates in (1) into a single predicate which returns true only if
+   all predicates in (1) return true.
+   If there are no predicates input, return nil.
+
+   Example: to obtain a predicate that returns true only if its argument is both positive and even:
+   (let [pred (merge-predicates even? pos?)]
+     (pred 2)) => true"
+  [& args]
+  (let [preds (filter fn? args)]
+    (if (seq preds)
+      (let [composite (apply every-pred preds)]
+        (fn [path] (composite path))))))
+
