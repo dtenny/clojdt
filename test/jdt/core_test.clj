@@ -7,6 +7,25 @@
   (testing "FIXME, I fail."
     (is (= 0 1))))
 
+(deftest test-assoc-if
+  (testing "assoc-if"
+    (let [l '[:a a :b b :c nil :d false]]
+      (is (= (assoc-if {} nil :a nil) {}))
+      (is (= (assoc-if {} nil :a false) {}))
+      (is (= (assoc-if {} nil :a 'a) {:a 'a}))
+      (is (= (apply assoc-if {:g "g"} (fn [k v] (not (nil? v))) l)) {:d false, :b 'b, :a 'a, :g "g"}))))
+  
+(deftest test-seqable?
+  (testing "seqable?"
+    (is (seqable? ()))
+    (is (seqable? {}))
+    (is (seqable? []))
+    (is (seqable? #{}))
+    (is (seqable? (list)))
+    (is (not (seqable? nil)))))
+        
+        
+
 (deftest map-matches-1
   (testing "map-matches"
     (is (= (map-matches "abc" (seq {:b-key "b" :a-key "a" :d-key "d"}) contained-in-string?)
@@ -45,3 +64,15 @@
     (is (nil? (merge-predicates :foo nil)))))
           
 
+(deftest test-get-indexes
+  (testing "get-indexes"
+    (is (= (get-indexes {:a 1 :b ["c" "d"]} [])
+           '((:a) (:b 0) (:b 1))))
+    (let [form {:a 1 :b [{:c 2 :d [{:e 3 :f "abc"}]} {:g 1}]}
+          indices (get-indexes form [])]
+      (is (= indices '((:a) (:b 0 :c) (:b 0 :d 0 :f) (:b 0 :d 0 :e) (:b 1 :g))))
+      (is (= (get-in form (nth indices 2)) "abc")))
+    (let [form [10 11 12 {:a 1} [:b :c :d] {:e {:f :g}}]
+          indices (get-indexes form [])]
+      (is (= indices '((0) (1) (2) (3 :a) (4 0) (4 1) (4 2) (5 :e :f)))))))
+    

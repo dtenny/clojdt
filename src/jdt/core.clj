@@ -1,12 +1,12 @@
 (ns jdt.core
-  (import java.io.File)
-  (import java.io.BufferedReader)
-  (import java.util.Date)
-  (import java.text.SimpleDateFormat)
-  (use clojure.tools.trace)
-  (require clojure.java.io)
-  (require [clojure.pprint :refer [cl-format]])
-  (use clojure.test))                  ;'is'
+  (:import java.io.File)
+  (:import java.io.BufferedReader)
+  (:import java.util.Date)
+  (:import java.text.SimpleDateFormat)
+  (:use clojure.tools.trace)
+  (:require [clojure.walk :as walk])
+  (:require [clojure.java.io :as io])
+  (:require [clojure.pprint :refer [cl-format]]))
 
 #_
 (defn defined?
@@ -183,6 +183,12 @@
 (println "E")(and-let [x true] x)
 )
 
+(defn seqable? "True if x can be turned into a seq via 'seq'"
+  [x]
+  (or (seq? x)
+      (coll? x)
+      (list? x)))
+
 ;; (use 'clojure.walk) -> provides macroexpand-all, useful sometimes where macroexpand isn't enough
 ;; recursive macros like and-let being one of those cases
 
@@ -191,7 +197,7 @@
    then returns the File object if the file exists on disk, or nil if the file does not exist.
    Existence does not imply file type, for example the file could be a directory."
   [file-coercible-thing]
-  (let [file (clojure.java.io/as-file file-coercible-thing)]
+  (let [file (io/as-file file-coercible-thing)]
     (and (or (.exists file) nil) ; false->nil for return value
          file)))
 
@@ -364,7 +370,7 @@
   ([source]
      ;; Note, to return a lazy sequence, we'd need to return some lazy opener/closer
      ;; and ensure it was invoked by storing it some java weak reference so that we close it when gc'd.
-     (with-open [^BufferedReader rdr (clojure.java.io/reader source)] ;returns a BufferedReader
+     (with-open [^BufferedReader rdr (io/reader source)] ;returns a BufferedReader
        (loop [lines []]
          (if-let [line (.readLine rdr)]
            (recur (conj lines line))
@@ -373,7 +379,7 @@
      {:pre [(or (nil? count) (integer? count))]}
      (if (nil? count)
        (readlines source)
-       (with-open [^BufferedReader rdr (clojure.java.io/reader source)]
+       (with-open [^BufferedReader rdr (io/reader source)]
          (loop [lines [] count count]
            (if (> count 0)
              (if-let [line (.readLine rdr)]
@@ -480,13 +486,6 @@
        (assoc-if map pred key val)
        (let [[nextk nextv & nextkvs] kvs]
          (recur (assoc-if map pred key val) pred nextk nextv nextkvs)))))
-#_
-(do
-  (def l '[:a a :b b :c nil :d false])
-  (is (= (assoc-if {} nil :a nil) {}))
-  (is (= (assoc-if {} nil :a false) {}))
-  (is (= (assoc-if {} nil :a 'a) {:a 'a}))
-  (is (= (apply assoc-if {:g "g"} (fn [k v] (not (nil? v))) l)) {:d false, :b 'b, :a 'a, :g "g"}))
 
 (defmacro with-temporary-file
   "Execute body with a binding to a temporary File that will be created on entry and deleted on exit
@@ -554,4 +553,15 @@
     (if (seq preds)
       (let [composite (apply every-pred preds)]
         (fn [path] (composite path))))))
+
+(defn get-indexes
+  "Return a sequence of distinct index paths (as subsequences) that can be used with 'get-in'
+  on 'form'.  The initial call is typically (get-indexes form [])."
+  [form result]
+  (cond
+   (map? form)
+   (mapcat (fn [e] (get-indexes (val e) (concat result [(key e)]))) form)
+   (seqable? form)
+   (reduce concat (map-indexed (fn [i val] (get-indexes val (concat result [i]))) form))
+   :else [result]))
 
