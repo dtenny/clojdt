@@ -31,6 +31,21 @@
   ([name] (and (defined? name *ns*) (do (ns-unmap *ns* name) (not (defined? name *ns*)))))
   ([name ns] (and (defined? name ns) (do (ns-unmap ns name) (not (defined? name *ns*))))))
 
+(defn ns-vars
+  "Return sequence of vars interned in ns.
+  Note that these may represent functions as well as other values, since every value in the map
+  returned by ns-interns is a clojure.lang.Var."
+  ([] (ns-vars *ns*))
+  ([ns] (->> (ns-interns ns)
+             vals)))
+
+(defn ns-unfun-vars
+  "Return sequence of vars interned in ns that do not have functions as values.
+  Useful if you want to see what might resemble 'traditional' variables in the namespace."
+  ([] (ns-unfun-vars *ns*))
+  ([ns] (->> (ns-interns ns)
+             (filter (fn [e] (not (fn? (var-get (val e))))))
+             vals)))
 
 (defmacro def-
   "Like 'def', only the resulting symbol is private to the namespace."
@@ -556,7 +571,8 @@
 
 (defn get-indexes
   "Return a sequence of distinct index paths (as subsequences) that can be used with 'get-in'
-  on 'form'.  The initial call is typically (get-indexes form [])."
+  on 'form'.  The initial call is typically (get-indexes form []).
+  This is very useful if you want to figure out some useful search paths in nested structures."
   [form result]
   (cond
    (map? form)
