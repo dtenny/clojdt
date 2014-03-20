@@ -527,13 +527,13 @@
   "Return a string that makes for an easily typed no-escapes-needed substring of a file name.
   The following optional arguments are permitted in any order:
   - A single java.util.Date argument which will be used to represent the date/time.
-  - A keyword indicating the desired format, :date (yyyyMMMdd), :datetime (yyyyMMMdd-HHmmss, the default),
+  - A keyword indicating the desired format, :date (yyyyMMdd), :datetime (yyyyMMdd-HHmmss, the default),
     :time (HHmmss)."
   [& args]
   (let [date (or (find-if (fn [x] (instance? java.util.Date x)) args) (Date.))
         format (or (find-if keyword? args) :datetime)
-        format-string (or (format {:date "yyyyMMMdd"
-                                   :datetime "yyyyMMMdd-HHmmss"
+        format-string (or (format {:date "yyyyMMdd"
+                                   :datetime "yyyyMMdd-HHmmss"
                                    :time "HHmmss"})
                           (throw (Exception. (str "Invalid format keyword: " format))))
         ;; N.B. SimpleDateFormat objects are not thread safe.
