@@ -739,6 +739,48 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (.toRealPath (expand path (:no-tilde opts)) (follow (:follow opts))))))
 
+(defn ^Path sub-path
+  "Returns a relative path that is a subsequence of name elements of (path coercible) path.
+  (You could also call 'as-path' on a subsequence of 'to-seq' of path, but this is more efficient.)
+
+  start - index of first path element, inclusive (closest to root, index 0).
+  end   - index of last path element, exclusive.
+
+  E.g. (subpath \"a/b/c\" 1 2) => #<UnixPath b>
+
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion on path."
+  ([path ^Integer start ^Integer end] (sub-path path start end nil))
+  ([path ^Integer start ^Integer end opts] 
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (.subpath (expand path (:no-tilde opts)) start end))))
+
+(defn starts-with
+  "Return true if (path coercible) 'path' starts with the same name components in (path coercible)
+   'other', false otherwise.
+   Wrapper around java.nio.file.Path/startsWith().
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion on arguments."
+  ([path other] (starts-with path other nil))
+  ([path other opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (.startsWith (expand path (:no-tilde opts)) (expand other (:no-tilde opts))))))
+
+(defn ends-with
+  "Return true if (path coercible) 'path' ends with the same name components in (path coercible)
+   'other', false otherwise.
+   Wrapper around java.nio.file.Path/endsWith().
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion on arguments."
+  ([path other] (ends-with path other nil))
+  ([path other opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (.endsWith (expand path (:no-tilde opts)) (expand other (:no-tilde opts))))))
+       
+;; compare/compareTo, note that
+;; (clojure.core/compare (as-path x) (as-path y)) will invoke compareTo() in the java Comparable interface.
+;; as '=' invokes equals().
+
 (defn ^URI to-uri
   "Return an URI that represents a path.
    This is a wrapper around java.nio.file.Path/toUri().
