@@ -1,6 +1,6 @@
 (ns jdt.easyfs
   "Clojure functions for easy file system manipulation. Requires Java 7.
-   Most everything in this module coerces arguments to java.nio.files.Path, and returns Path objects.
+   Most everything in this module coerces arguments to java.nio.file.Path, and returns Path objects.
    By default, shell-like tilde expansion is also enabled on inputs to these APIs."
   (:use jdt.core)
   (:use [jdt.shell :only [bash-tilde-expansion]])
@@ -9,7 +9,7 @@
   (:import java.io.File)
   (:import java.net.URI)
   (:import (java.nio.file DirectoryStream DirectoryStream$Filter
-                          Files FileSystems FileSystem LinkOption Path
+                          Files FileSystems FileSystem LinkOption Path Paths
                           PathMatcher))
   (:import (java.nio.file.attribute PosixFilePermissions))
   (:import java.nio.charset.Charset)
@@ -27,22 +27,21 @@
 (defonce ^{:private true}  empty-string-array (into-array String [])) ; for getPath
 
 (defn- ^Path seq-to-path
-  "Convert sequence of things to a path, where each element of sequence is element of path."
-  [x]
-  (let [seqtypes (into #{} (map class x))
-        first-type (first seqtypes)]
-    (cond (> (count seqtypes) 1)
-          (throw (Exception. (str "Can't handle inputs of multiple types at this time for: " x)))
-          (isa? first-type String)
-          (.getPath default-fs (first x) (into-array String (rest x)))
-          :else (throw (Exception. (str "Can't unable input of type " first-type " for: " x))))))
+  "Convert sequence of things to a path, where each element of sequence is element of path.
+  This is done by taking the string representation of each thing in the sequence."
+  [s]
+  (.getPath default-fs (str (first s)) (into-array String (map str (rest s)))))
 
 (defmulti ^Path as-path "Coerce object to Path. Does not perform tilde expansion. See also 'to-path'." class)
 (defmethod ^Path as-path String [x] (.getPath default-fs x empty-string-array))
 (defmethod ^Path as-path File [x] (.toPath x))
 (defmethod ^Path as-path Path [x] x)  
 (defmethod ^Path as-path clojure.lang.ISeq [x] (seq-to-path x))
+(defmethod ^Path as-path URI [x] (Paths/get x))
   
+(defn path? "Return true if x is a java.nio.file.Path, false otherwise."
+  [x] (instance? Path x))
+
 ;; Options translators.  Convert options in option map to values expected by APIs
 (defn- encoding "Translate encoding option to Charset" [x]
   (cond (string? x)
@@ -613,6 +612,17 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (.getFileName (expand x (:no-tilde opts))))))
 
+(defn ^Path root
+  "Returns the root component of (path coercible) x as a path object,
+  or nil if the path does not have a root component.  Probably more useful as a predicate than
+  fetching the '/' on a path as a path. Wraps java.nio.file.Path/getRoot()
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (root x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (.getRoot (expand x (:no-tilde opts))))))
+
 (defn absolute?
   "Return true if the path is absolute, false otherwise.
    This is a wrapper around java.nio.file.Path/isAbsolute().
@@ -623,6 +633,16 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (.isAbsolute (expand x (:no-tilde opts))))))
 
+(defn to-seq
+  "Return a sequence of Path components within (path-coercible) x.
+  Wraps java.nio.file.Path/iterator().
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (to-seq x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (iterator-seq (.iterator (expand x (:no-tilde opts)))))))
+
 (defn ^Path normalize  
   "Return a path with redundant elements (such as '.') eliminated.
    This is a wrapper around java.nio.file.Path/normalize().
@@ -632,6 +652,92 @@
   ([x opts]
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (.normalize (expand x (:no-tilde opts))))))
+
+(defn ^Path relativize
+  "Attempts to construct a relative path to (path coercible) 'target' that when resolved against
+  (path coercible) 'source' yields a path that can be used to locate the same file as 'target'.
+  (I.e. finds a path from source to target in the filesystem.)
+
+  If the paths are equal, an empty path is returned.
+  Throws an exception if the target path cannot be relativized against source.
+  See javadoc for caveats related to presence of root path components.
+  Results are implementation dependent when symbolic links are involved.
+  E.g. (relativize \"a/b\" \"a/b/c/d\") => #<Unixpath c/d>.
+  A wrapper around java.nio.file.Path/relativize().
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion on paths."
+  ([source target] (relativize source target nil))
+  ([source target opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)
+           ^Path target (expand target (:no-tilde opts))]
+       (.relativize (expand source (:no-tilde opts)) target))))
+
+(defn ^Path path-resolve
+  "Supposedly this is the inverse of 'relativitize'.
+   Attempts to merge (path coercible) source and target to yield a path, preferably based on source,
+   to the target.  In other words it joins target with source, attempting to treat source as a directory,
+   such that the resulting path ends with target.
+
+   Example: (resolve \"/a/b\" \"./b/c\") => #<UnixPath /a/b/./b/c>
+
+   If the target path has a root component results are implementation dependent (i.e. unspecified).
+   If the target is an absolute path, returns target.  If target is empty, returns source.
+   Throws InvalidPathException if string cannot be converted to a path.
+
+   A wrapper around java.nio.file.Path/resolve().  It's not called 'resolve' because that would conflict
+   with a namespace function of the same name in clojure.core.
+
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion on paths."
+  ([source target] (path-resolve source target nil))
+  ([source target opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)
+           ^Path target (expand target (:no-tilde opts))]
+       (.resolve (expand source (:no-tilde opts)) target))))
+
+(defn ^Path resolve-sibling
+  "Resolves (path coercible) target against (path coercible) source's parent path.
+  Useful where a file name needs to be replaced with another file name.
+  If source path does not have a parent path or target is absolute then return
+  target. If target is an empty path return the source path parent, or if there is no parent, the empty path.
+
+  Example: (resolve-sibling \"dir1/dir2/foo\" \"bar\") => #<UnixPath dir1/dir2/bar>
+  A wrapper around java.nio.file.Path/resolveSibling().
+  Throws InvalidPathException if string cannot be converted to a path.
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion on paths."
+  ([source target] (resolve-sibling source target nil))
+  ([source target opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)
+           ^Path target (expand target (:no-tilde opts))]
+       (.resolveSibling (expand source (:no-tilde opts)) target))))
+
+(defn ^Path abs-path
+  "If (path coercible) path is absolute, returns path.
+   Otherwise attempts to resolve the path by looking at implementation
+   dependent context such as a process' current working directory (e.g. java system property 'user.dir').
+   May throw an IOError if the file system is not accessible.
+   Wrapper around java.nio.file.Path/toAbsolutePath().
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion on path."
+  ([path] (abs-path path nil))
+  ([path opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (.toAbsolutePath (expand path (:no-tilde opts))))))
+
+(defn ^Path real-path
+  "Attempt to derive the real pathname based on existing filesystem structure.  For example,
+  if case insensitive file system names are present, the returned path components will exactly match
+  the corresponding places in the file system. This is basically a (->> path normalize abs-path <massage>)
+  behavior. This is a wrapper around java.nio.file.Path/toRealPath().
+  Throws IOException if the file indicated by the (path coercible) argument doesn't exist.
+  Options:
+    :follow true/false, whether or not to follow symbolic link if x is a link.
+    :no-tilde true/false, whether or not to do tilde expansion on path."
+  ([path] (real-path path nil))
+  ([path opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (.toRealPath (expand path (:no-tilde opts)) (follow (:follow opts))))))
 
 (defn ^URI to-uri
   "Return an URI that represents a path.
@@ -669,7 +775,6 @@
                (expand (str x) no-tilde)
                x)
              (as-path x)))))))
-
 
 (extend-protocol Coercions
   Path

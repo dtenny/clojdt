@@ -12,6 +12,14 @@
 ;;; Figure out how to use fixtures to set up some special files for tesitng
 ;;; (setup/teardown infrastructure for this type of testing)
 
+(deftest test-path-conversions
+  (testing "Test x<->Path conversions"
+    (is (path? (as-path "abc")))
+    (is (path? (as-path (to-file (as-path "abc")))))
+    (is (path? (as-path (as-path "abc"))))
+    (is (path? (as-path (to-uri (as-path "abc")))))
+    (is (path? (as-path '("a" "b" "c"))))
+    (is (path? (as-path (seq [1 2 3]))))))
 
 (deftest test-exists
   (testing "exists? and not-exists?"
