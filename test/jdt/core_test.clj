@@ -7,6 +7,26 @@
   (testing "FIXME, I fail."
     (is (= 0 1))))
 
+(deftest test-cl-find
+  (testing "cl-find"
+    (is (= (cl-find :a '(:b :a :c)) :a))
+    (is (= (cl-find :d '(:b :a :c)) nil))
+    (is (nil? (cl-find :a '(:b :a 1 :c 2 :a :e) :key str)))
+    (is (= (cl-find ":a" '(:b :a 1 :c 2 :a :e) :key str)))
+    (is (= (cl-find 1 '(1 0 -1 2 3 0) :test >) 0))
+    (is (= (cl-find 1 '(1 0 -1 2 3 0) :test <) 2))
+    (is (nil? (cl-find 1 '(1 0 -1 2 3 0) :test > :key (fn [x] (+ x 10)))))
+    (is (= (cl-find 1 '(1 0 -1 2 3 0) :test < :key (fn [x] (+ x 10))) 1))
+    (is (= (cl-find 1 '(1 0 -1 2 3) :start 1) nil))
+    (is (= (cl-find 1 '(1 0 -1 2 3) :start 0) 1))
+    (is (= (cl-find 1 '(1 0 -1 2 3 0) :end 1) 1))
+    (is (= (cl-find 0 '(1 0 -1 2 3 0) :end 1) nil))
+    (is (= (cl-find 0 '(1 0 -1 2 3 0) :end 2) 0))
+    (is (= (cl-find 0 '(1 -1 2 3 0) :from-end true :test >) -1))
+    (is (= (cl-find 0 '(1 -1 2 3 0) :start 2 :from-end true :test >) nil))
+    (is (= (cl-find 0 '(1 -1 2 3 0) :start 1 :from-end true :test >) -1))
+    ))
+
 (deftest test-assoc-if
   (testing "assoc-if"
     (let [l '[:a a :b b :c nil :d false]]

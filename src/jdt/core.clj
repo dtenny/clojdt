@@ -160,6 +160,41 @@
         item
         (recur pred (rest coll))))))
 
+;; Let's talk about finding things.
+;; clojure.core/find only finds map entries for keys in maps.
+;; clojure.core/some could do it, though I'm often too lazy to want to wrap the object to be found
+;; in the right predicate.
+;; clojure.core/filter can do it, but might return more items than I want, I only want one.
+
+(defn cl-find
+  "A version of the common lisp 'find' function.
+   Return the item in sequence that for which test returns true.
+
+   Options:
+   :test - a function of two arguments (default '=') whose logical boolean result is used to find an item.
+           The test is called with the 'item' argument as the first test fn argument.
+   :start - first element index (inclusive, default 0) in the sequence to begin examination of elements.
+   :end - last element index (exclusive, default nil = length of sequence) to examine in sequence.
+   :from-end - logical true if you want to search from the end of the sequence, false otherwise.
+   :key - a function of one argument (default identity) applied to the collection elements before applying
+          'test'.  Remember that item is returned, not the key applied to the sequence member.
+
+   Forces partial or full valuation of lazy sequences."
+  [item sequence & {:keys [start end from-end key test]}]
+  (let [sequence (if start (drop start sequence) sequence)
+        sequence (if end (take end sequence) sequence)
+        sequence (if from-end (reverse sequence) sequence)
+        keyfn (or key identity)
+        testfn (or test =)]
+    (if key
+      (some (fn [x] (let [y (keyfn x)] (if (testfn item y) x))) sequence)
+      (some (fn [x] (if (testfn item x) x)) sequence))))
+
+(defn each
+  "Return a lazy sequence containing every element in seq for which predicate returns logical true."
+  [pred seq]
+  (filter identity (map (fn [item] (if (pred item) item)) seq)))
+
 (defn apropos-match-fn
   "Given a string or regular expression, return a function that will invoke .contains or re-find 
   respectively on the pattern string or regular expression against an input string.

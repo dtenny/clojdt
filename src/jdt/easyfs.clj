@@ -2,6 +2,7 @@
   "Clojure functions for easy file system manipulation. Requires Java 7.
    Most everything in this module coerces arguments to java.nio.file.Path, and returns Path objects.
    By default, shell-like tilde expansion is also enabled on inputs to these APIs."
+  (:require clojure.string)             ;split-lines
   (:use jdt.core)
   (:use [jdt.shell :only [bash-tilde-expansion]])
   (:use [jdt.closer :only [ensure-close]])
@@ -11,7 +12,7 @@
   (:import (java.nio.file DirectoryStream DirectoryStream$Filter
                           Files FileSystems FileSystem LinkOption Path Paths
                           PathMatcher))
-  (:import (java.nio.file.attribute PosixFilePermissions))
+  (:import (java.nio.file.attribute FileAttribute PosixFilePermission PosixFilePermissions))
   (:import java.nio.charset.Charset)
   )
 
@@ -53,6 +54,63 @@
     (into-array LinkOption [])
     (into-array LinkOption [LinkOption/NOFOLLOW_LINKS])))
 
+(defn- posix-file-permission-enum
+  "Return the the java java.nio.file.attribute.PosixFilePermission enum
+   corresponding to the supplied keword, or return false if keyword does not map to a valid enum.
+   Keywords should be from the set of:
+      :{group,owner,others}-{read,write-execute} if x is a keyword of the correct format.
+   From that we return PosixFilePermission/GROUP_EXECUTE, and so on."
+  [x]
+  (and (keyword? x)
+       (let [tokens (map clojure.string/upper-case (clojure.string/split (name x) #"-"))]
+         (and (= (count tokens) 2)
+              (cl-find (first tokens) ["GROUP" "OWNER" "OTHERS"])
+              (cl-find (second tokens) ["READ" "WRITE" "EXECUTE"])
+              (PosixFilePermission/valueOf (str (first tokens) "_" (second tokens)))))))
+
+(defn- positive-file-permissions-in-map
+  "For all map entries in a map whose keys are posix file permission keywords,
+   and whose values are logical true (i.e. positive, not negative).
+   Return a sequence of PosixFilePermission objects or an empty sequence if there aren't any."
+  [m]
+  {:pre (map? m)}
+  ;; N.B. this is not the same as jdt.core/each
+  ;; *TODO*/*FINISH*:
+  ;; See if we have a convenience equivalent for this in Utils.lsp or in core clojure libraries
+  (filter identity (map (fn [e] (and (val e) (posix-file-permission-enum (key e)))) (seq m))))
+
+(defn- file-attribute-permissions
+  "Process a :permissions options value as described in '(options-help :permissions)'.
+   Return a FileAttribute<Set<PosixFilePermissions>> instance.
+   Presently invalid keywords corresponding to permissions are silently ignored."
+  [optval]                              ;value of :permissions option
+  (cond (string? optval)                ;"rwxr-xr-x"
+        (let [permset (PosixFilePermissions/fromString optval)]
+          (PosixFilePermissions/asFileAttribute permset))
+        (map? optval)           ;keyword/value pairings, e.g. :group-read true
+        (let [permset (into #{} (positive-file-permissions-in-map optval))]
+          (PosixFilePermissions/asFileAttribute permset))
+        (seq optval) ;keywords sequence, e.g. [:group-read :user-read] #{:owner-read}
+        (let [permset (into #{} (map posix-file-permission-enum (seq optval)))]
+          (PosixFilePermissions/asFileAttribute permset))
+        :else
+        (throw (Exception. (str "Unable to process permissions specification: " optval)))))
+
+(defn- file-attribute
+  "Interpret map-entries that represents FileAttribute situations, or return nil.
+   TBD: Whether it works to specify the same keyword twice with non-overlapping attribute values."   
+  [e]
+  (let [k (key e)]
+    (cond (= k :permissions)
+          (file-attribute-permissions (val e))
+          ;; *FINISH* *TODO*: Principals/Acls/Timess
+          )))
+
+(defn- file-attributes "Convert eligible map options into a vector of FileAttribute<T> objects."
+  [opts]
+  (into-array FileAttribute
+              (filterv not-nil? (mapv file-attribute (seq opts)))))
+
 ;; Options keywords and default values
 (def                                    ;defonce
   ^{:doc
@@ -71,7 +129,45 @@
    :regex    "A string specifying a regex pattern as documented in 
              documented in java.nio.file.FileSystem.getPathMatcher() or nil/absent.  Default: none.
              An exception is thrown if the regex is invalid."
+   :permissions 
+             "Indicates one or more posix file permissions.
+             If present these are converted into java.nio.file.attribute.FileAttribute values
+             for APIs that accept FileAttribute arguments.
+
+             The value for this the :permissions keyword can take one of three forms:
+             (1) A string of nine characters similar to \"rwxr-xr-x\",
+             (2) A map of keywords whose names are derived from the following set:
+                 ':{owner,group,other}-{read,write,execute}'
+                 Values corresponding to the above are logical true or logical false.
+             (3) A sequence of keywords are derived from the same set as (2)
+                 but whose values are implicitly true.
+
+             Examples:
+                 :permissions \"rwx------\"
+                 :permissions {:group-read true :owner-read true :owner-write false}
+                 :permissions '(:group-read :owner-read :owner-write)
+
+             In all cases, permissions which are not explicitly specified will default to suitable
+             file system defaults, possibly controlled by 'umask' or other modes.
+
+             File attribute keywords that are not valid are presently ignored, so make sure you don't say
+             :user-read, for example, when the correct keyword is :owner-read.
+
+             Note that file system controls applied to the parent directory
+             may override attempts at specifying permissions on newly created
+             or updated file system entities."
    })
+
+(defn options-help
+  "Describe valid-option-keys in human readable form.
+   If keys are specified only the documentation for those options is printed.
+   E.g. (options-help :encoding :no-tilde)"
+  [& keys]
+  (doseq [e valid-option-keys]
+    (when (or (nil? keys) (some #(= (key e) %) keys))
+      (println (key e))
+      (doseq [line (clojure.string/split-lines (val e))]
+        (println "   " (clojure.string/trim line))))))
 
 (def                                    ;defonce
   ^{:doc
@@ -558,9 +654,35 @@
 ;; to read and write the different properties.
 
 
-;;
-;; File mutators (creation, deletion, copies, updates, attributes, etc)
-;;
+;;;
+;;; File mutators (creation, deletion, copies, updates, attributes, etc)
+;;;
+
+;; Clojure.java.io has some flexible copy stuff we don't want to reproduce if we can avoid it.
+;; Inputs=(InputStream,Reader,File,byte[],String)
+;; Outputs=(OutputStream,Writer,File)
+;; Options=(buffer-size,encoding)
+
+;; java.nio.file.Files supports
+;; Inputs=(Path,InputStream)
+;; Outputs=(Path,OutputStream)
+;; Options=(ATOMIC_MOVE, COPY_ATTRIBUTES, REPLACE_EXISTING, NOFOLLOW_LINKS)
+
+;; *TODO* copy APIs
+
+(defn create-directory
+  "Create a single directory.  Wrapper for java.nio.file.Files.createDirectory().
+  Options:
+    :permissions as documented in '(options-help :permissions)'.
+    :no-tilde true/false, whether or not to do tilde expansion on path."
+  ([path] (create-directory path nil))
+  ([path opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/createDirectory (expand path (:no-tilde opts)) (file-attributes opts)))))
+
+;; *FINISH*: test create-directory and :permissions interactions.
+
+;; *FINISH*: rest of file apis, like create-directories and so on.
 
 
 
