@@ -107,6 +107,11 @@
   [value]
   (not (nil? value)))
 
+(defn not-empty?
+  "Returns true if the specified collection or sequence is not empty."
+  [value]
+  (not (empty? value)))
+
 (defn false-arg-wrap
   "Wraps a function f so that if any arguments passed to f are logically false, the returned function
   returns nil.  Otherwise the returned function applies f to its args.  See also 'fnil'.
@@ -536,6 +541,30 @@
        (assoc-if map pred key val)
        (let [[nextk nextv & nextkvs] kvs]
          (recur (assoc-if map pred key val) pred nextk nextv nextkvs)))))
+
+;; *TODO*: a version of this, or an option to this, that does the function of unix 'tee'.
+;; *TODO*: append option for the resulting file
+(defmacro with-output
+  "Execute body while binding *out* and *err* to one (or two) writer-coercible destination(s).
+   Return the value of body.  See also 'clojure.core/with-out-str'"
+  [destinations & body]
+  {:pre [(vector? destinations)
+         (and (> (count destinations) 0) (< (count destinations) 3))]}
+  (let [d1 (first destinations)
+        d2 (second destinations)]
+    `(let [d2# ~d2]
+       (with-open [writer1# (~io/writer ~d1)
+                   writer2# (or (and d2# (~io/writer d2#)) writer1#)]
+         (binding [*out* writer1# *err* writer2#]
+           ~@body)))))
+#_
+(with-output ["/tmp/foo"]               ;*err* *out* to same file
+  (clojure.pprint/cl-format *out* "hi *out*~%")
+  (clojure.pprint/cl-format *err* "hi *err*~%"))
+#_
+(with-output ["/tmp/foo" "/tmp/bar"]    ;*err* *out* to separate files
+  (clojure.pprint/cl-format *out* "hi *out*~%")
+  (clojure.pprint/cl-format *err* "hi *err*~%"))
 
 (defmacro with-temporary-file
   "Execute body with a binding to a temporary File that will be created on entry and deleted on exit
