@@ -1,5 +1,6 @@
 (ns jdt.easyfs-test
   (:require [clojure.test :refer :all]
+            [jdt.core :refer [cl-print]]
             [jdt.easyfs :refer :all])
   (:import java.nio.file.NotDirectoryException))
 
@@ -109,3 +110,31 @@
 ;; *TODO*: test these: owner, group, ctime, mtime, atime, file-key, size, file-store,
 ;; perm-keys, perm-string, content-type, read-bytes, read-lines, read-symlink,
 
+(deftest test-directory
+  (testing "directory creation/deletion"
+    (let [tdir (create-temp-directory)]
+      (is (exists? tdir))
+      (is (dir? tdir))
+      (let [cdir (as-path [tdir "cdir"])]
+        (delete-if-exists cdir)
+        (is (create-directory cdir))
+        (is (exists? cdir))
+        (is (dir? cdir))
+        (is (delete-if-exists cdir)))
+      (let [cdir (as-path [tdir "x" "y" "z"])]
+        (delete-if-exists cdir)
+        (is (create-directories cdir))
+        (is (exists? cdir))
+        (is (dir? cdir))
+        ;; need to delete child dirs first
+        (is (thrown? java.io.IOException (delete tdir)))
+        ;; Drop /tmp and /tmp/<tdir>
+        (doseq [p (reverse (drop 2 (resolve-component-paths cdir)))]
+          (is (dir? p))
+          (is (delete-if-exists p))
+          (is (not (dir? p)))))
+      (is (exists? tdir))
+      (is (delete-if-exists tdir))
+      (is (not (exists? tdir))))))
+        
+            

@@ -37,7 +37,7 @@
 (defmethod ^Path as-path String [x] (.getPath default-fs x empty-string-array))
 (defmethod ^Path as-path File [x] (.toPath x))
 (defmethod ^Path as-path Path [x] x)  
-(defmethod ^Path as-path clojure.lang.ISeq [x] (seq-to-path x))
+(defmethod ^Path as-path clojure.lang.Seqable [x] (seq-to-path x))
 (defmethod ^Path as-path URI [x] (Paths/get x))
   
 (defn path? "Return true if x is a java.nio.file.Path, false otherwise."
@@ -74,9 +74,6 @@
    Return a sequence of PosixFilePermission objects or an empty sequence if there aren't any."
   [m]
   {:pre (map? m)}
-  ;; N.B. this is not the same as jdt.core/each
-  ;; *TODO*/*FINISH*:
-  ;; See if we have a convenience equivalent for this in Utils.lsp or in core clojure libraries
   (filter identity (map (fn [e] (and (val e) (posix-file-permission-enum (key e)))) (seq m))))
 
 (defn- file-attribute-permissions
@@ -129,6 +126,8 @@
    :regex    "A string specifying a regex pattern as documented in 
              documented in java.nio.file.FileSystem.getPathMatcher() or nil/absent.  Default: none.
              An exception is thrown if the regex is invalid."
+   :parent   "A (path coercible) argument, typically naming some parent directory for the operation."
+   :prefix   "A string prefix (may be nil), typically used in operations like temporary file name generation."
    :permissions 
              "Indicates one or more posix file permissions.
              If present these are converted into java.nio.file.attribute.FileAttribute values
@@ -672,6 +671,8 @@
 
 (defn create-directory
   "Create a single directory.  Wrapper for java.nio.file.Files.createDirectory().
+   Throws IOExceptions if unable to create the directory, or if the directory already exists.
+   Returns a path representing the created directory.
   Options:
     :permissions as documented in '(options-help :permissions)'.
     :no-tilde true/false, whether or not to do tilde expansion on path."
@@ -680,9 +681,75 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (Files/createDirectory (expand path (:no-tilde opts)) (file-attributes opts)))))
 
-;; *FINISH*: test create-directory and :permissions interactions.
+(defn create-directories
+  "Create a director creating nonexistent parent directories first if necessary.
+   Wrapper for java.nio.file.Files.createDirectories().
+   Throws IOExceptions if unable to create the directory, but *NOT* if the directory already exists
+   (unlike 'create-directory', however it still throws if there's a file in the way of a directory
+   needing to exist).
+   Returns a path representing the created directory.
+  Options:
+    :permissions as documented in '(options-help :permissions)'.
+    :no-tilde true/false, whether or not to do tilde expansion on path."
+  ([path] (create-directories path nil))
+  ([path opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/createDirectories (expand path (:no-tilde opts)) (file-attributes opts)))))
+  
+(defn create-temp-directory
+  "Create a new temporary directory.
 
-;; *FINISH*: rest of file apis, like create-directories and so on.
+   E.g. (create-temp-directory {:parent \"/nfs/this-dir\" :prefix \"footmp\"})
+
+   Note that 'temp' mean the file will automatically be deleted when closed or
+   on JVM exit, such behavior is left to the caller with tools such as
+   Runtime.addShutdownHook() or File.deleteOnExit(), or with-temporary-directory.
+
+   Wrapper for java.nio.file.Files.createTempDirectory().
+   Throws IOExceptions if unable to create the directory, or if parent directory does not exist.
+   Returns a path representing the created directory.
+  Options:
+    :permissions as documented in '(options-help :permissions)'.
+    :prefix, a string that will be used, if possible, in generating the resulting directory path.
+             May be nil.
+    :parent, a path coercible argument specifying a parent directory in which to create the resulting path.
+    :no-tilde true/false, whether or not to do tilde expansion on parent, if specified."
+  ([] (create-temp-directory nil))
+  ([opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)
+           parent (:parent opts)]
+       (if parent
+         (Files/createTempDirectory (expand parent (:no-tilde opts)) (:prefix opts) (file-attributes opts))
+         (Files/createTempDirectory (:prefix opts) (file-attributes opts))))))
+
+
+(defn delete
+  "Delete the file/directory/link specified by (path coercible) path.
+   Wrapper for java.nio.file.Files.delete().
+   Throws IOExceptions if there the path cannot be deleted. Returns nil.
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion on path."
+  ([path] (delete path nil))
+  ([path opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/delete (expand path (:no-tilde opts))))))
+
+(defn delete-if-exists
+  "Delete the file/directory/link specified by (path coercible) path if it exists.
+   Wrapper for java.nio.file.Files.deleteIfExists().
+   Throws IOExceptions if there path exists but cannot be deleted.
+   Returns true if the path was deleted, false if it did not exist.
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion on path."
+  ([path] (delete-if-exists path nil))
+  ([path opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/deleteIfExists (expand path (:no-tilde opts))))))
+
+;; *FINISH*: test :permissions interactions on methods that take them
+;; *FINISH*: rest of file apis
+;; *FINISH*: with-temporary-{file,directory} in this module, move from jdt.core.  Referenced in doc strings here.
+;; Consider delete-directories too, like (rm -rf), that calls (reverse (drop 2 (resolve-component-paths p)))
 
 
 
@@ -755,16 +822,6 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (.isAbsolute (expand x (:no-tilde opts))))))
 
-(defn to-seq
-  "Return a sequence of Path components within (path-coercible) x.
-  Wraps java.nio.file.Path/iterator().
-  Options:
-    :no-tilde true/false, whether or not to do tilde expansion."
-  ([x] (to-seq x nil))
-  ([x opts]
-     (let [opts (if opts (merge default-option-values opts) default-option-values)]
-       (iterator-seq (.iterator (expand x (:no-tilde opts)))))))
-
 (defn ^Path normalize  
   "Return a path with redundant elements (such as '.') eliminated.
    This is a wrapper around java.nio.file.Path/normalize().
@@ -800,7 +857,7 @@
    to the target.  In other words it joins target with source, attempting to treat source as a directory,
    such that the resulting path ends with target.
 
-   Example: (resolve \"/a/b\" \"./b/c\") => #<UnixPath /a/b/./b/c>
+   Example: (path-resolve \"/a/b\" \"./b/c\") => #<UnixPath /a/b/./b/c>
 
    If the target path has a root component results are implementation dependent (i.e. unspecified).
    If the target is an absolute path, returns target.  If target is empty, returns source.
@@ -816,6 +873,45 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)
            ^Path target (expand target (:no-tilde opts))]
        (.resolve (expand source (:no-tilde opts)) target))))
+
+(defn resolve-component-paths
+  "Return a vector of resolved Path components within (path-coercible) x.
+
+   The difference from (seq path) is that (seq path) returns a bunch of largely useless and
+   non-existent paths as far as the file system goes, whereas (to-resolved-seq
+   path) returns a sequence in which all paths will exist if the original path
+   exists.
+
+   (Note that seq path accomplishes the goal of the Path.iterator() method because Path implements
+   Iterable).
+
+   E.g.  (seq (as-path \"/tmp/x/y/z\")
+         => (#<UnixPath tmp> #<UnixPath x> #<UnixPath y> #<UnixPath z>)
+
+         (resolve-component-paths \"/tmp/x/y/z\")
+         => [#<UnixPath /tmp> #<UnixPath /tmp/x> #<UnixPath /tmp/x/y> #<UnixPath /tmp/x/y/z>]
+
+   Note that it matters whether the path is absolute:
+         (resolve-component-paths \"tmp/x/y/z\")
+         => [#<UnixPath x> #<UnixPath x/y> #<UnixPath x/y/z>]
+
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (resolve-component-paths x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)
+           path (expand x (:no-tilde opts))
+           root (root path)]
+       (loop [paths (seq path) result [] current nil]
+         (if-not (empty? paths)
+           (let [first-path (first paths)
+                 current (if current
+                           (path-resolve current first-path)
+                           (if root
+                             (path-resolve root first-path)
+                             first-path))]
+             (recur (rest paths) (conj result current) current))
+           result)))))
 
 (defn ^Path resolve-sibling
   "Resolves (path coercible) target against (path coercible) source's parent path.
