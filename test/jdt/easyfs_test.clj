@@ -136,5 +136,24 @@
       (is (exists? tdir))
       (is (delete-if-exists tdir))
       (is (not (exists? tdir))))))
+
+(deftest test-directory-perms
+  (testing "directory permissions"
+    (let [tdir (create-temp-directory
+                {:permissions {:owner-write false :group-write false :other-write false :owner-read true}})]
+      (is (exists? tdir))
+      (is (dir? tdir))
+      (is (not (writable? tdir)))
+      (is (= (perm-string tdir) "r--------"))
+      (delete tdir))
+    (let [tdir (create-temp-directory {:permissions "rwx---rwx"})]
+      ;; Set<FilePermissions> is as expected, but resulting perms not as expected. 
+      ;; Assuming umask is 0002, then :other-write is disabled
+      (is (= (perm-string tdir) "rwx---r-x"))
+      (delete tdir))
+    (let [tdir (create-temp-directory {:permissions [:owner-read :owner-write]})]
+      (is (= (perm-string tdir) "rw-------"))
+      (delete tdir))
+    ))
         
             

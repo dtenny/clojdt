@@ -188,6 +188,8 @@ Also arranges for {:seq true} to be the default options for conch-wrapped comman
 
 ;; Can we use :dir :env with the above commands?
 
+;; *TODO*: Consider making {:err *err*} a default, right no we don't get error with default options.
+
 (defprogram ^{:doc "Invoke 'ls' from the calling shell's PATH."} ls ls)
 (defn lf [& args]
   (take 40 (rest (apply ls "-lt" args)))) ;rest skips header line

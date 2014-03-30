@@ -146,15 +146,16 @@
                  :permissions {:group-read true :owner-read true :owner-write false}
                  :permissions '(:group-read :owner-read :owner-write)
 
-             In all cases, permissions which are not explicitly specified will default to suitable
-             file system defaults, possibly controlled by 'umask' or other modes.
+             If NO permissions are specified, then platform default permissions are supplied.
+             If ONE OR MORE permissions are specified, then any permissions unspecified (or false)
+             will be 'off'.
+
+             Any 'on' permissions specifically specified are potentially negated by 'umask'
+             or other restrictions imposed by parent directories and the like.
 
              File attribute keywords that are not valid are presently ignored, so make sure you don't say
-             :user-read, for example, when the correct keyword is :owner-read.
-
-             Note that file system controls applied to the parent directory
-             may override attempts at specifying permissions on newly created
-             or updated file system entities."
+             :user-read, for example, when the correct keyword is :owner-read. (Bash uses 'u' for user,
+             Java's permission is 'owner', there is no 'user'."
    })
 
 (defn options-help
@@ -697,7 +698,7 @@
        (Files/createDirectories (expand path (:no-tilde opts)) (file-attributes opts)))))
   
 (defn create-temp-directory
-  "Create a new temporary directory.
+  "Create a new directory.  More appropriately called create-unique-directory.
 
    E.g. (create-temp-directory {:parent \"/nfs/this-dir\" :prefix \"footmp\"})
 
@@ -726,7 +727,7 @@
 (defn delete
   "Delete the file/directory/link specified by (path coercible) path.
    Wrapper for java.nio.file.Files.delete().
-   Throws IOExceptions if there the path cannot be deleted. Returns nil.
+   Throws IOExceptions if the path cannot be deleted. Returns nil.
   Options:
     :no-tilde true/false, whether or not to do tilde expansion on path."
   ([path] (delete path nil))
@@ -746,7 +747,7 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (Files/deleteIfExists (expand path (:no-tilde opts))))))
 
-;; *FINISH*: test :permissions interactions on methods that take them
+;; *FINISH*: test :permissions interactions on methods that take them (directory somewhat tested already).
 ;; *FINISH*: rest of file apis
 ;; *FINISH*: with-temporary-{file,directory} in this module, move from jdt.core.  Referenced in doc strings here.
 ;; Consider delete-directories too, like (rm -rf), that calls (reverse (drop 2 (resolve-component-paths p)))
