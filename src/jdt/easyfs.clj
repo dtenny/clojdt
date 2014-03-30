@@ -7,12 +7,13 @@
   (:use [jdt.shell :only [bash-tilde-expansion]])
   (:use [jdt.closer :only [ensure-close]])
   (:use clojure.java.io)
-  (:import java.io.File)
+  (:import (java.io File IOException))
   (:import java.net.URI)
-  (:import (java.nio.file DirectoryStream DirectoryStream$Filter
-                          Files FileSystems FileSystem LinkOption Path Paths
-                          PathMatcher))
-  (:import (java.nio.file.attribute FileAttribute PosixFilePermission PosixFilePermissions))
+  (:import (java.nio.file
+            DirectoryStream DirectoryStream$Filter Files FileSystems FileSystem FileVisitor FileVisitResult
+            LinkOption Path Paths PathMatcher))
+  (:import (java.nio.file.attribute
+            BasicFileAttributes FileAttribute PosixFilePermission PosixFilePermissions))
   (:import java.nio.charset.Charset)
   )
 
@@ -1103,6 +1104,45 @@
        (if (Files/exists path follow)
          (.toRealPath path follow)))))
          
-     
+(defn delete-directory
+  "rm -rf, use with caution.  Returns *FINISH*.
+   Throws IOException if unable to delete any particular file or directory,
+   does not attempt to continue deleting files after the first failure.
+   Does not follow links. (Could support :follow, deliberately does not).
 
-   
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (delete-directory x nil))
+  ([x opts]
+     {:pre [(not (:follow opts))]}
+     (let [opts (if opts (merge default-option-values opts) default-option-values)
+           path (expand x (:no-tilde opts))]
+       (assert (dir? path))
+       (Files/walkFileTree path
+          ;; This differs from SimpleFileVisitor in that it won't re-throw in visitFileFailed
+          (proxy
+              [FileVisitor] []
+            (visitFile [^Path file ^BasicFileAttributes attrs]
+              (Files/delete file)
+              FileVisitResult/CONTINUE)
+            (visitFileFailed [^Path file, ^IOException e]
+              (if e (println (str file) "failed:" (str e)))
+              FileVisitResult/CONTINUE)
+            (preVisitDirectory [^Path dir ^BasicFileAttributes attrs]
+              FileVisitResult/CONTINUE)
+            (postVisitDirectory [^Path dir ^IOException e]
+              (if e (println (str file) "failed:" (str e)))
+              (Files/delete dir)
+              FileVisitResult/CONTINUE))))))
+
+;;; *FINISH*: delete-directory needs some testing/tuning with respect to failures/exceptions 
+;;; Need some these to better test that.
+;;;static Path	setAttribute(Path path, String attribute, Object value, LinkOption... options)
+;;;Sets the value of a file attribute.
+;;;static Path	setLastModifiedTime(Path path, FileTime time)
+;;;Updates a file's last modified time attribute.
+;;;static Path	setOwner(Path path, UserPrincipal owner)
+;;;Updates the file owner.
+;;;static Path	setPosixFilePermissions(Path path, Set<PosixFilePermission> perms)
+
+;;; *FINISH*: probably want :verbose option for delete-directory

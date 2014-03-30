@@ -174,3 +174,11 @@
     ))
         
             
+;;; *FINISH*: needs some more testing with failures
+(deftest test-delete-directory
+  (testing "delete-directory"
+    (let [tdir (create-temp-directory)
+          ndir (create-directories (as-path [tdir "x" "y" "z"]))
+          file (create-temp-file {:parent ndir})]
+      (delete-directory ndir)
+      (delete-directory tdir))))
