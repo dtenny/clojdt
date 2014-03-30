@@ -128,6 +128,7 @@
              An exception is thrown if the regex is invalid."
    :parent   "A (path coercible) argument, typically naming some parent directory for the operation."
    :prefix   "A string prefix (may be nil), typically used in operations like temporary file name generation."
+   :suffix   "A string suffix (may be nil), typically used in operations like temporary file name generation."
    :permissions 
              "Indicates one or more posix file permissions.
              If present these are converted into java.nio.file.attribute.FileAttribute values
@@ -214,6 +215,7 @@
 (defn exists?
   "Return true if x (a path coercible thing) exists, false otherwise.
    This is a wrapper around java.nio.file.Files/exists().
+   See also: 'probe-file'.
   Options:
     :follow true/false, whether or not to follow symbolic link if x is a link.
     :no-tilde true/false, whether or not to do tilde expansion."
@@ -702,13 +704,13 @@
 
    E.g. (create-temp-directory {:parent \"/nfs/this-dir\" :prefix \"footmp\"})
 
-   Note that 'temp' mean the file will automatically be deleted when closed or
+   Note that 'temp' does NOT mean the file will automatically be deleted when closed or
    on JVM exit, such behavior is left to the caller with tools such as
    Runtime.addShutdownHook() or File.deleteOnExit(), or with-temporary-directory.
 
    Wrapper for java.nio.file.Files.createTempDirectory().
    Throws IOExceptions if unable to create the directory, or if parent directory does not exist.
-   Returns a path representing the created directory.
+   Returns a path representing the newly created directory.
   Options:
     :permissions as documented in '(options-help :permissions)'.
     :prefix, a string that will be used, if possible, in generating the resulting directory path.
@@ -717,12 +719,42 @@
     :no-tilde true/false, whether or not to do tilde expansion on parent, if specified."
   ([] (create-temp-directory nil))
   ([opts]
+     {:pre [(or (and (:prefix opts) (string? (:prefix opts))) true)]}
      (let [opts (if opts (merge default-option-values opts) default-option-values)
            parent (:parent opts)]
        (if parent
          (Files/createTempDirectory (expand parent (:no-tilde opts)) (:prefix opts) (file-attributes opts))
          (Files/createTempDirectory (:prefix opts) (file-attributes opts))))))
 
+(defn create-temp-file
+  "Create a new file.  More appropriately called create-unique-file.
+
+   E.g. (create-temp-file {:parent \"/nfs/this-dir\" :prefix \"footmp\"})
+
+   Note that 'temp' does NOT mean the file will automatically be deleted when closed or
+   on JVM exit, such behavior is left to the caller with tools such as
+   Runtime.addShutdownHook() or File.deleteOnExit(), or with-temporary-directory.
+
+   Wrapper for java.nio.file.Files.createTempFile().
+   Throws IOExceptions if unable to create the file or if parent directory does not exist.
+   Returns a path representing the newly created file.
+  Options:
+    :permissions as documented in '(options-help :permissions)'.
+    :prefix, a string that will be used in generating the resulting file name. May be nil.
+    :suffix, a string that will be used in generating the resulting file name.
+             May be nil, in wchih case '.tmp' is used.
+    :parent, a path coercible argument specifying a parent directory in which to create the new file.
+    :no-tilde true/false, whether or not to do tilde expansion on parent, if specified."
+  ([] (create-temp-file nil))
+  ([opts]
+     {:pre [(or (and (:prefix opts) (string? (:prefix opts))) true)
+            (or (and (:suffix opts) (string? (:suffix opts))) true)]}
+     (let [opts (if opts (merge default-option-values opts) default-option-values)
+           parent (:parent opts)]
+       (if parent
+         (Files/createTempFile (expand parent (:no-tilde opts))
+                               (:prefix opts) (:suffix opts) (file-attributes opts))
+         (Files/createTempFile (:prefix opts) (:suffix opts) (file-attributes opts))))))
 
 (defn delete
   "Delete the file/directory/link specified by (path coercible) path.
@@ -747,7 +779,6 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (Files/deleteIfExists (expand path (:no-tilde opts))))))
 
-;; *FINISH*: test :permissions interactions on methods that take them (directory somewhat tested already).
 ;; *FINISH*: rest of file apis
 ;; *FINISH*: with-temporary-{file,directory} in this module, move from jdt.core.  Referenced in doc strings here.
 ;; Consider delete-directories too, like (rm -rf), that calls (reverse (drop 2 (resolve-component-paths p)))
@@ -793,7 +824,11 @@
        (.getParent (expand x (:no-tilde opts))))))
 
 (defn ^Path file-name
-  "Return the file name (i.e. last component of the path) as a Path. (Use 'str' to get a string).
+  "Return the file name (i.e. last component of the path) as a Path.
+
+   Use 'str' on the result to get a string, or 'file-name-string'
+   which exists to remind you 'file-name' does not return a string.
+
    This is a wrapper around java.nio.file.Path/getFileName().
   Options:
     :no-tilde true/false, whether or not to do tilde expansion."
@@ -801,6 +836,11 @@
   ([x opts]
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (.getFileName (expand x (:no-tilde opts))))))
+
+(defn ^String file-name-string
+  "Identical to 'file-name' but returns a String instead of a Path."
+  ([x] (str (file-name x nil)))
+  ([x opts] (str (file-name x opts))))
 
 (defn ^Path root
   "Returns the root component of (path coercible) x as a path object,
@@ -1041,3 +1081,28 @@
   Path
   (as-url [p] (.toUri p))
   (as-file [p] (.toFile p)))
+
+;;;
+;;; What follows are things that build on the java.nio stuff above.
+;;;
+
+(defn probe-file
+  "Similar to Common Lisp's namesake function with an optional argument for handling symbolic links.
+   Probes a file for existence, and if it exists, returns the real-path of the file.
+   Returns nil if the file does not exist.
+   See also: 'exists?', 'real-path'.
+
+  Options:
+    :follow true/false, whether or not to follow symbolic link if x is a link.
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([x] (probe-file x nil))
+  ([x opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)
+           path (expand x (:no-tilde opts))
+           follow (follow (:follow opts))]
+       (if (Files/exists path follow)
+         (.toRealPath path follow)))))
+         
+     
+
+   

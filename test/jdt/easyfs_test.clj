@@ -1,6 +1,6 @@
 (ns jdt.easyfs-test
+  (:use jdt.core)
   (:require [clojure.test :refer :all]
-            [jdt.core :refer [cl-print]]
             [jdt.easyfs :refer :all])
   (:import java.nio.file.NotDirectoryException))
 
@@ -136,6 +136,23 @@
       (is (exists? tdir))
       (is (delete-if-exists tdir))
       (is (not (exists? tdir))))))
+
+(deftest test-file
+  (testing "file creation/deletion"
+    (let [file (create-temp-file)]
+      (is (file? file))
+      (is (= 0 (size file)))
+      (delete file)
+      (is (not (delete-if-exists file))))
+    (let [file (create-temp-file {:prefix "abc" :suffix "def" :parent "~" :permissions "rwx------"})]
+      (is (file? file))
+      (is (= (perm-string file) "rwx------"))
+      (is (string-contains? (str file) "abc"))
+      (is (string-contains? (str file) "def"))
+      (is (not (string-contains? (file-name-string (first (seq file))) "tmp")))
+      (is (= 0 (size file)))
+      (is (delete-if-exists file)))))
+
 
 (deftest test-directory-perms
   (testing "directory permissions"

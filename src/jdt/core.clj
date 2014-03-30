@@ -247,15 +247,6 @@
 ;; (use 'clojure.walk) -> provides macroexpand-all, useful sometimes where macroexpand isn't enough
 ;; recursive macros like and-let being one of those cases
 
-(defn probe-file
-  "Tries to coerce its argument to a java.io.File object,
-   then returns the File object if the file exists on disk, or nil if the file does not exist.
-   Existence does not imply file type, for example the file could be a directory."
-  [file-coercible-thing]
-  (let [file (io/as-file file-coercible-thing)]
-    (and (or (.exists file) nil) ; false->nil for return value
-         file)))
-
 (defn cl-print
   "A Common Lisp style PRINT function.
   Output a newline, a mostly READable representation of OBJECT, and a space to the specified STREAM. 
