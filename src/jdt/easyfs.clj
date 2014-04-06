@@ -11,7 +11,7 @@
   (:import java.net.URI)
   (:import (java.nio.file
             DirectoryStream DirectoryStream$Filter Files FileSystems FileSystem FileVisitor FileVisitResult
-            LinkOption Path Paths PathMatcher))
+            LinkOption Path Paths PathMatcher SimpleFileVisitor))
   (:import (java.nio.file.attribute
             BasicFileAttributes FileAttribute PosixFilePermission PosixFilePermissions))
   (:import java.nio.charset.Charset)
@@ -780,10 +780,15 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (Files/deleteIfExists (expand path (:no-tilde opts))))))
 
-;; *FINISH*: rest of file apis
-;; *FINISH*: with-temporary-{file,directory} in this module, move from jdt.core.  Referenced in doc strings here.
-;; Consider delete-directories too, like (rm -rf), that calls (reverse (drop 2 (resolve-component-paths p)))
+;;;static Path	setAttribute(Path path, String attribute, Object value, LinkOption... options)
+;;;Sets the value of a file attribute.
+;;;static Path	setLastModifiedTime(Path path, FileTime time)
+;;;Updates a file's last modified time attribute.
+;;;static Path	setOwner(Path path, UserPrincipal owner)
+;;;Updates the file owner.
+;;;static Path	setPosixFilePermissions(Path path, Set<PosixFilePermission> perms)
 
+;; *FINISH*: rest of file apis
 
 
 ;;
@@ -1105,7 +1110,8 @@
          (.toRealPath path follow)))))
          
 (defn delete-directory
-  "rm -rf, use with caution.  Returns *FINISH*.
+  "Basically rm -rf on a path-coercible argument x, use with caution.
+   Returns the (path-coerced) argument x.
    Throws IOException if unable to delete any particular file or directory,
    does not attempt to continue deleting files after the first failure.
    Does not follow links. (Could support :follow, deliberately does not).
@@ -1119,30 +1125,18 @@
            path (expand x (:no-tilde opts))]
        (assert (dir? path))
        (Files/walkFileTree path
-          ;; This differs from SimpleFileVisitor in that it won't re-throw in visitFileFailed
           (proxy
-              [FileVisitor] []
+              [SimpleFileVisitor] []
             (visitFile [^Path file ^BasicFileAttributes attrs]
               (Files/delete file)
               FileVisitResult/CONTINUE)
-            (visitFileFailed [^Path file, ^IOException e]
-              (if e (println (str file) "failed:" (str e)))
-              FileVisitResult/CONTINUE)
-            (preVisitDirectory [^Path dir ^BasicFileAttributes attrs]
-              FileVisitResult/CONTINUE)
             (postVisitDirectory [^Path dir ^IOException e]
-              (if e (println (str file) "failed:" (str e)))
-              (Files/delete dir)
+              (if e
+                (do 
+                  (println (str file) "Not deleting" dir "because of previous failure" (str e))
+                  FileVisitResult/TERMINATE)
+                (Files/delete dir))
               FileVisitResult/CONTINUE))))))
 
-;;; *FINISH*: delete-directory needs some testing/tuning with respect to failures/exceptions 
-;;; Need some these to better test that.
-;;;static Path	setAttribute(Path path, String attribute, Object value, LinkOption... options)
-;;;Sets the value of a file attribute.
-;;;static Path	setLastModifiedTime(Path path, FileTime time)
-;;;Updates a file's last modified time attribute.
-;;;static Path	setOwner(Path path, UserPrincipal owner)
-;;;Updates the file owner.
-;;;static Path	setPosixFilePermissions(Path path, Set<PosixFilePermission> perms)
+;; *FINISH*: with-temporary-{file,directory} in this module, move from jdt.core.  Referenced in doc strings here.
 
-;;; *FINISH*: probably want :verbose option for delete-directory
