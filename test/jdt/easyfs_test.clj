@@ -4,11 +4,7 @@
             [jdt.easyfs :refer :all])
   (:import java.nio.file.NotDirectoryException))
 
-#_
-(deftest a-test
-  (testing "FIXME, I fail."
-    (is (= 0 1))))
-
+;;; Apologies, this is only tested on linux, it clearly isn't going to work as-is for Windows systems.
 
 ;;; Figure out how to use fixtures to set up some special files for tesitng
 ;;; (setup/teardown infrastructure for this type of testing)
@@ -173,8 +169,6 @@
       (delete tdir))
     ))
         
-            
-;;; *FINISH*: needs some more testing with failures
 (deftest test-delete-directory
   (testing "delete-directory"
     (let [tdir (create-temp-directory)
@@ -182,3 +176,22 @@
           file (create-temp-file {:parent ndir})]
       (delete-directory ndir)
       (delete-directory tdir))))
+
+(deftest test-read-attributes
+  (testing "read-attributes, attribute-map"
+    (is (map? (attribute-map (read-attributes "/tmp"))))))
+
+(deftest test-get-attribute
+  (testing "get-attribute"
+    (is (= (get-attribute "/tmp" "unix:uid") 0))))
+
+(deftest test-set-attribute
+  (testing "set-attribute"
+    (let [file (create-temp-file)
+          perms "rw-------"]
+      (set-attribute file "posix:permissions"
+                     (java.nio.file.attribute.PosixFilePermissions/fromString perms))
+      (is (= (java.nio.file.attribute.PosixFilePermissions/toString
+              (get-attribute file "posix:permissions"))
+             perms))
+      (delete file))))

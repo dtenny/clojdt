@@ -39,6 +39,7 @@ return a seq of all accessible java packages that match the string-or-regexp"
   "List public 'member' methods and fields of a Java class.
 Not sure about inherited stuff and static methods."
   [class]
+  ;; *TBD* Consider .getDeclaredMethods so we don't see supertype methods
   (concat (.getFields class) (.getMethods class)))
 
 (defn class-apropos "Perform apropos on a class and return class members that match str-or-pattern"

@@ -13,7 +13,8 @@
             DirectoryStream DirectoryStream$Filter Files FileSystems FileSystem FileVisitor FileVisitResult
             LinkOption Path Paths PathMatcher SimpleFileVisitor))
   (:import (java.nio.file.attribute
-            BasicFileAttributes FileAttribute PosixFilePermission PosixFilePermissions))
+            BasicFileAttributes PosixFileAttributes DosFileAttributes
+            FileAttribute PosixFilePermission PosixFilePermissions))
   (:import java.nio.charset.Charset)
   )
 
@@ -109,6 +110,58 @@
   (into-array FileAttribute
               (filterv not-nil? (mapv file-attribute (seq opts)))))
 
+(defn- atype->fileAttributeClass
+  "Convert keyword to subtype of BasicFileAttributes as per (options-help :atype).
+   Defaults to :basic if key is nil.
+   Throw IllegalArgumentException if we can't do it."
+  [key]
+  (let [key (or key :basic)
+        class (get {:basic BasicFileAttributes :posix PosixFileAttributes :dos  DosFileAttributes} key)]
+    (if (nil? class)
+      (throw (IllegalArgumentException.
+              (str "Don't know how to convert " key " to a subtype of BasicFileAttributes."))))
+    class))
+
+
+(defn attribute-map
+  ;; I considered reflection approaches for this, but for performance and overall map brevity
+  ;; I've hard coded dependencies on the BasicFileAttributes type hierarchy for now.
+  "Convert an implementation of java.nio.file.attribute.BasicFileAttributes to a clojure map.
+   Note that it is more memory efficient to operate on the native data structure if you're examining
+   many file attribute instances.  For PosixFileAttributes, permissions are returned as from 
+   PosixFilePermissions.toString().
+
+   Keywords in the resulting map match those for get-attribute, as documented in the
+   BasicFileAttributeView and similar classes, also summarized by (attribute-help)."
+  [attrs]
+  (let [basic-attrs
+        {:creationTime (.creationTime attrs) :fileKey (.fileKey attrs) :isDirectory (.isDirectory attrs)
+         :isOther (.isOther attrs) :isRegularFile (.isRegularFile attrs)
+         :isSymbolicLink (.isSymbolicLink attrs)
+         :lastAccessTime (.lastAccessTime attrs)
+         :lastModifiedTime (.lastModifiedTime attrs) :size (.size attrs)}]
+    (cond (instance? PosixFileAttributes attrs)
+          ;; Note that JDK PosixFileAttributeView lacks 'owner' access, bug or feature?
+          (merge basic-attrs {:group (.getname (.group attrs)) :owner (.getName (.owner attrs))
+                              :permissions (PosixFilePermissions/toString (.permissions attrs))})
+          (instance? DosFileAttributes attrs)
+          (merge basic-attrs {:archive (.isArchive attrs) :hidden (.isHidden attrs)
+                              :readonly (.isReadOnly attrs) :system (.isSystem attrs)})
+          :else basic-attrs)))
+  
+(defn attribute-help
+  "Documentation on file attribute names used with set-attribute, get-attribute, and attribute-map(return)
+   functions."
+  []
+  (println
+   "File attributes have the form [view-name:]attribute-list
+    view-names are 'basic', 'posix' (or 'unix'), and 'dos'.  Defaults to 'basic'.
+   '*' is a pseudo-attribute name and can be used to get all attributes for a view.
+   basic: creationTime,lastAccessTime,lastModifiedTime,fileKey,isDirectory,isOther,isRegularFile,
+          isSymbolicLink,size
+   posix: group,owner,permissions
+   dos:   archive,readonly,hidden,system"))
+
 ;; Options keywords and default values
 (def                                    ;defonce
   ^{:doc
@@ -130,6 +183,10 @@
    :parent   "A (path coercible) argument, typically naming some parent directory for the operation."
    :prefix   "A string prefix (may be nil), typically used in operations like temporary file name generation."
    :suffix   "A string suffix (may be nil), typically used in operations like temporary file name generation."
+   :atype "Specifies the type of attributes to fetch as a keyword.  valid types include
+           :basic (BasicFileAttributes), :posix (PosixFileAttributes), and :dos (:DosFileAttributes).
+           UnsupportedOperationException maybe thrown if the attributes requested are not
+           compatible with the underlying file system.  Defaults to :basic if unspecified."
    :permissions 
              "Indicates one or more posix file permissions.
              If present these are converted into java.nio.file.attribute.FileAttribute values
@@ -365,9 +422,11 @@
        (.getName (Files/getAttribute (expand x (:no-tilde opts)) "posix:group" (follow (:follow opts)))))))
 
 (defn ctime
-  "Return a FileTime with the creation modification time of the file.
+  "Return a java.nio.file.attribute.FileTime with the creation modification time of the file.
    The file must exist or an exception is thrown.
    This is a wrapper around java.nio.file.Files/getAttribute().
+   Note that the function name is not reflective of the PosixFileAttribute name,
+   it is more for unix familiarity when used in 'find' like predicates.
   Options:
     :follow true/false, whether or not to follow symbolic link if x is a link.
     :no-tilde true/false, whether or not to do tilde expansion."
@@ -377,9 +436,11 @@
        (Files/getAttribute (expand x (:no-tilde opts)) "unix:creationTime" (follow (:follow opts))))))
 
 (defn mtime 
-  "Return a FileTime with the last modification time of the file.
+  "Return a java.nio.file.attribute.FileTime with the last modification time of the file.
    The file must exist or an exception is thrown.
    This is a wrapper around java.nio.file.Files/getLastModifiedTime().
+   Note that the function name is not reflective of the PosixFileAttribute name,
+   it is more for unix familiarity when used in 'find' like predicates.
   Options:
     :follow true/false, whether or not to follow symbolic link if x is a link.
     :no-tilde true/false, whether or not to do tilde expansion."
@@ -389,9 +450,11 @@
        (Files/getLastModifiedTime (expand x (:no-tilde opts)) (follow (:follow opts))))))
 
 (defn atime 
-  "Return a FileTime with the last access time of the file.
+  "Return a java.nio.file.attribute.FileTime with the last access time of the file.
    The file must exist or an exception is thrown.
-   This is a wrapper around java.nio.file.Files/getLastModifiedTime().
+   This is a wrapper around java.nio.file.Files/getLastModifiedTime(),
+   Note that the function name is not reflective of the PosixFileAttribute name,
+   it is more for unix familiarity when used in 'find' like predicates.
   Options:
     :follow true/false, whether or not to follow symbolic link if x is a link.
     :no-tilde true/false, whether or not to do tilde expansion."
@@ -473,6 +536,44 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (Files/probeContentType (expand x (:no-tilde opts))))))
 
+(defn get-attribute
+  "Reads and returns the value of the specified file attribute for some (path coercible) path.
+   E.g. (get-attribute \"/tmp\" \"unix:uid\") =>  0
+   Attribute names are as documented in (attribute-help).
+   This is a wrapper around java.nio.file.Files/getAttribute().
+  Options:
+    :follow true/false, whether or not to follow symbolic link if x is a link.
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([path attribute] (get-attribute path attribute nil))
+  ([path attribute opts]
+     {:pre [(string? attribute) (or (nil? opts) (map? opts))]}
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/getAttribute (expand path (:no-tilde opts)) attribute (follow (:follow opts))))))
+
+(defn read-attributes
+  "Read a file's attributes as a bulk operation for a given (path coercible) 'path'.
+   The file must exist or an exception is thrown. 
+   This is a wrapper around java.nio.file.Files/readAttributes().
+
+   By default and for efficiency, the return value of this function is the same
+   as that for the underlying wrapped routine, e.g. an instance of
+   BasicFileAttributes.  Clojure map representations are available by calling
+   the 'attribute-map' function on the result.
+
+  Options:
+    :atype specifies the type of attributes to fetch as a keyword.  valid types include
+           :basic (BasicFileAttributes), :posix (PosixFileAttributes), and :dos (:DosFileAttributes).
+           UnsupportedOperationException maybe thrown if the attributes requested are not
+           compatible with the underlying file system.  Defaults to :basic if unspecified.
+    :follow true/false, whether or not to follow symbolic link if x is a link.
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([path] (read-attributes path nil))
+  ([path opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/readAttributes (expand path (:no-tilde opts)) (atype->fileAttributeClass (:atype opts))
+                             (follow (:follow opts))))))
+
+
 (defn read-bytes
   "Return a (mutable) Java byte array (i.e. byte[], not Byte[]) of file content.
    The file must exist or an exception is thrown. 
@@ -510,8 +611,6 @@
   ([x opts]
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (Files/readSymbolicLink (expand x (:no-tilde opts))))))
-
-;; *TBD* readAttributes()
 
 
 ;;
@@ -671,7 +770,7 @@
 ;; Outputs=(Path,OutputStream)
 ;; Options=(ATOMIC_MOVE, COPY_ATTRIBUTES, REPLACE_EXISTING, NOFOLLOW_LINKS)
 
-;; *TODO* copy APIs
+;; *TODO*/*FINISH* copy APIs
 
 (defn create-directory
   "Create a single directory.  Wrapper for java.nio.file.Files.createDirectory().
@@ -780,15 +879,35 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (Files/deleteIfExists (expand path (:no-tilde opts))))))
 
-;;;static Path	setAttribute(Path path, String attribute, Object value, LinkOption... options)
-;;;Sets the value of a file attribute.
+(defn set-attribute
+  "Sets the value of the specified file attribute for some (path coercible) path.
+   E.g. (set-attribute \"/tmp/foo.sh\" \"posix:permissions\"
+                       (java.nio.file.attribute.PosixFilePermissions/fromString \"rwxr-xr-x\")) 
+   Attribute names are as documented in (attribute-help).
+   This is a wrapper around java.nio.file.Files/setAttribute().
+   Returns the (coerced) path argument.
+   *TBD*: Whether we might dress up the attribute value interpretation so the caller doesn't
+   have to do owner/group/permission translations.  For now see value-add functions
+   set-xxxxx in this module.
+
+  Options:
+    :follow true/false, whether or not to follow symbolic link if x is a link.
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([path attribute value] (set-attribute path attribute value nil))
+  ([path attribute value opts]
+     {:pre [(string? attribute) (or (nil? opts) (map? opts))]}
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/setAttribute (expand path (:no-tilde opts)) attribute value (follow (:follow opts))))))
+
+;; *FINISH*: rest of file apis
 ;;;static Path	setLastModifiedTime(Path path, FileTime time)
 ;;;Updates a file's last modified time attribute.
 ;;;static Path	setOwner(Path path, UserPrincipal owner)
 ;;;Updates the file owner.
 ;;;static Path	setPosixFilePermissions(Path path, Set<PosixFilePermission> perms)
 
-;; *FINISH*: rest of file apis
+;;; newBufferedReader(), newBufferedWriter(), newByteChannel() newInputStream(), newOutputStream()
+
 
 
 ;;
