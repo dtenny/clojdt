@@ -96,3 +96,24 @@
           indices (get-indexes form [])]
       (is (= indices '((0) (1) (2) (3 :a) (4 0) (4 1) (4 2) (5 :e :f)))))))
     
+(deftest test-with-output
+  (testing "with-output"
+    (let [file (java.io.File/createTempFile "core_test", "tmp")
+          file2 (java.io.File/createTempFile "core_test", "tmp")]
+      (is (= (with-output [(.getAbsolutePath file)] (print "hi") 'bye) 'bye))
+      (is (= (slurp file) "hi"))
+      (is (= (with-output [file] (print "bye") 'hi) 'hi))
+      (is (= (slurp file) "bye"))
+      (with-output [file]
+        ;; The order of these isn't necessarily guaranteed by with-output, but we know the implementation
+        ;; flushes *out* first.
+        (clojure.pprint/cl-format *out* "h")
+        (clojure.pprint/cl-format *err* "i"))
+      (is (= (slurp file) "hi"))
+      (with-output [file file2]
+        (clojure.pprint/cl-format *out* "b")
+        (clojure.pprint/cl-format *err* "ye"))
+      (is (= (slurp file) "b"))
+      (is (= (slurp file2) "ye"))
+      (.delete file)
+      (.delete file2))))

@@ -547,15 +547,10 @@
        (with-open [writer1# (~io/writer ~d1)
                    writer2# (or (and d2# (~io/writer d2#)) writer1#)]
          (binding [*out* writer1# *err* writer2#]
-           ~@body)))))
-#_
-(with-output ["/tmp/foo"]               ;*err* *out* to same file
-  (clojure.pprint/cl-format *out* "hi *out*~%")
-  (clojure.pprint/cl-format *err* "hi *err*~%"))
-#_
-(with-output ["/tmp/foo" "/tmp/bar"]    ;*err* *out* to separate files
-  (clojure.pprint/cl-format *out* "hi *out*~%")
-  (clojure.pprint/cl-format *err* "hi *err*~%"))
+           (let [result# (do ~@body)]
+             (. *out* (flush))
+             (. *err* (flush))
+             result#))))))
 
 (defmacro with-temporary-file
   "Execute body with a binding to a temporary File that will be created on entry and deleted on exit
