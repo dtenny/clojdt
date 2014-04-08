@@ -244,6 +244,33 @@
       (coll? x)
       (list? x)))
 
+(defn seqify
+  "If x is a singleton datum, return some kind of sequence of one element, x.
+   If x is a collection return a sequence for it.
+   If x is a sequence, return it as is.
+   Nil is given special treatment and is turned into an empty sequence,
+   however false is nto converted into an empty sequence."
+  [x]
+  (cond (seq? x) x
+        (coll? x) (seq x)
+        (nil? x) ()
+        :else (list x)))
+
+(defn listify
+  "Similar to seqify, but ensures that the returned collection type is a List.
+   If x is a singleton datum, return a list of one element, x.
+   If x is a non-list collection return a list for it.
+   If x is a sequence, return it as a list.
+   Nil is given special treatment and is turned into an empty list
+   however false is not converted into an empty sequence."
+  [x]
+  (cond (list? x) x
+        (seq? x) (into () x)
+        (coll? x) (into () x)
+        (nil? x) ()
+        :else (list x)))
+
+
 ;; (use 'clojure.walk) -> provides macroexpand-all, useful sometimes where macroexpand isn't enough
 ;; recursive macros like and-let being one of those cases
 
