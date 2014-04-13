@@ -424,6 +424,15 @@
   (map #(get %1 key key-not-found) maps))
 ;;(println (map-get 'map-get :key-not-found (ns-publics *ns*) (ns-map *ns*) (ns-refers *ns*)))
 
+(defn get-valid
+  "Return the value of (get map key). If key is not in map,
+   throw an IllegalArgumentException.  Note that 'get' applies to sets as well as maps."
+  [map key]
+  (let [result (get map key get-valid)]
+    (if (= result get-valid)
+      (throw (IllegalArgumentException. (str "No such key " key " in map.")))
+      result)))
+
 
 (defn printlines
   "Given a sequence, attempt to print one line for each element of the sequence, as if by
@@ -459,6 +468,12 @@
                (recur (conj lines line) (- count 1))
                lines)
              lines))))))
+
+(defn empty-string-alternative
+  "If string is not a string (e.g. nil) or is an empty string, return alternative, otherwise return string."
+  [string alternative]
+  (or (and (string? string) (> (count string) 0) string)
+      alternative))
 
 (defn string-contains? 
   "Return the zero-based index of substring in string if present, nil if not present.
