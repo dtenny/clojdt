@@ -14,7 +14,7 @@
             LinkOption Path Paths PathMatcher SimpleFileVisitor))
   (:import (java.nio.file.attribute
             BasicFileAttributes PosixFileAttributes DosFileAttributes
-            FileAttribute PosixFilePermission PosixFilePermissions))
+            FileAttribute PosixFilePermission PosixFilePermissions UserPrincipal))
   (:import java.nio.charset.Charset)
   )
 
@@ -770,7 +770,9 @@
 ;; Outputs=(Path,OutputStream)
 ;; Options=(ATOMIC_MOVE, COPY_ATTRIBUTES, REPLACE_EXISTING, NOFOLLOW_LINKS)
 
-;; *TODO*/*FINISH* copy APIs
+;; *TODO*/*FINISH* copy(), createSymbolicLink(), createLink(), 
+;;; newBufferedReader(), newBufferedWriter(), newByteChannel() newInputStream(), newOutputStream()
+
 
 (defn create-directory
   "Create a single directory.  Wrapper for java.nio.file.Files.createDirectory().
@@ -826,6 +828,19 @@
          (Files/createTempDirectory (expand parent (:no-tilde opts)) (:prefix opts) (file-attributes opts))
          (Files/createTempDirectory (:prefix opts) (file-attributes opts))))))
 
+(defn create-file
+  "Create a new and empty file, throwing an exception if the file already exists, parent directory doesn't exist, etc.
+   Wrapper for java.nio.file.Files.createFile().
+   Throws UnsupportedOperationException if the optional file attributes cannot be set atomically when creating the file.
+   Returns a path representing the created file.
+  Options:
+    :permissions as documented in '(options-help :permissions)'.
+    :no-tilde true/false, whether or not to do tilde expansion on path."
+  ([path] (create-file path nil))
+  ([path opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)]
+       (Files/createFile (expand path (:no-tilde opts)) (file-attributes opts)))))
+
 (defn create-temp-file
   "Create a new file.  More appropriately called create-unique-file.
 
@@ -879,6 +894,49 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (Files/deleteIfExists (expand path (:no-tilde opts))))))
 
+(defn set-owner
+  "Update the file owner.
+   The (Path coercible) path must be associated with a file system that supports FileOwnerAttributeView.
+   Owner should be a UserPrincipal coercible string naming a user, or a UserPrincpal object.
+   The file must exist or an exception is thrown.
+   This is a wrapper around java.nio.file.Files/setOwner().
+   Returns the Path of the updated file.
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([path owner] (set-owner path owner nil))
+  ([path owner opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)
+           path (expand path (:no-tilde opts))
+           owner (if (instance? UserPrincipal owner)
+                   owner
+                   (.lookupPrincipalByName (.getUserPrincipalLookupService (.getFileSystem path)) owner))]
+       (Files/setOwner path owner))))
+
+(defn set-posix-file-permissions
+  "Update the file permissions.
+   The (Path coercible) path must be associated with a file system that supports PosixFileAttributeView.
+   Permissions should be either a Set<PosixFilePermisions> reference, or values as described in
+   (options-help :permissions).  The difference for the latter compared to other functions in this module
+   is that we don't actually take the :permissions in an options map, it's an explicit argument here
+   (and you can specify Set<PosixFilePermissions> here, you can't there.
+   *TBD*: We should allow Set<PosixFilePermissions as arg to file-attribute-permissions).
+
+   Throws all manner of exceptions if the file doesn't exist, file system doesn't support permissions, and so on.
+   This is a wrapper around java.nio.file.Files/setPosixFilePermissions().
+   Returns the Path of the updated file.
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([path permissions] (set-posix-file-permissions path permissions nil))
+  ([path permissions opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)
+           path (expand path (:no-tilde opts))
+           permissions (if (and (instance? java.util.EnumSet permissions)
+                                (> (count permissions) 0)
+                                (instance? PosixFilePermission  (first permissions)))
+                         permissions
+                         (.value (file-attribute-permissions permissions)))] ; FileAttribute->Set<PosixFilePermissions>
+       (Files/setPosixFilePermissions path permissions))))
+
 (defn set-attribute
   "Sets the value of the specified file attribute for some (path coercible) path.
    E.g. (set-attribute \"/tmp/foo.sh\" \"posix:permissions\"
@@ -901,12 +959,6 @@
 
 ;; *FINISH*: rest of file apis
 ;;;static Path	setLastModifiedTime(Path path, FileTime time)
-;;;Updates a file's last modified time attribute.
-;;;static Path	setOwner(Path path, UserPrincipal owner)
-;;;Updates the file owner.
-;;;static Path	setPosixFilePermissions(Path path, Set<PosixFilePermission> perms)
-
-;;; newBufferedReader(), newBufferedWriter(), newByteChannel() newInputStream(), newOutputStream()
 
 
 

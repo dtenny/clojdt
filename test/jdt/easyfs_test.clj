@@ -195,3 +195,31 @@
               (get-attribute file "posix:permissions"))
              perms))
       (delete file))))
+
+(deftest test-set-owner
+  (let [file (create-temp-file)
+        name (System/getProperty "user.name")]
+    (set-owner file name)
+    (is (= (owner file) name))
+    (delete file)))
+
+(deftest test-set-posix-file-permissions
+  (let [file (create-temp-file)
+        perms "rw-r-----"]
+    (set-posix-file-permissions file perms)
+    (is (= (perm-string file) perms))
+    (set-posix-file-permissions file {:group-read false :owner-read true :owner-write true})
+    (is (not= (perm-string file) perms))
+    (set-posix-file-permissions file '(:owner-read))
+    (is (not= (perm-string file) perms))
+    (set-posix-file-permissions file (java.nio.file.attribute.PosixFilePermissions/fromString perms))
+    (is (= (perm-string file) perms))
+    (delete file)))
+
+(deftest test-create-file
+  (testing "create-file"
+    (delete-if-exists "/tmp/test-create-file")
+    (let [file "/tmp/test-create-file"]
+      (is (create-file file))
+      (is (exists? file))
+      (is (delete-if-exists file)))))
