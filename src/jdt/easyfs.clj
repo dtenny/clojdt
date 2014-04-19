@@ -574,29 +574,25 @@
                              (follow (:follow opts))))))
 
 
-(defn read-bytes
-  "Return a (mutable) Java byte array (i.e. byte[], not Byte[]) of file content.
+(defn read-all-bytes
+  "Return a mutable, eager Java byte array (i.e. byte[], not Byte[]) of file content.
    The file must exist or an exception is thrown. 
    This is a wrapper around java.nio.file.Files/readAllBytes().
   Options:
     :no-tilde true/false, whether or not to do tilde expansion."
-  ([x] (read-bytes x nil))
+  ([x] (read-all-bytes x nil))
   ([x opts]
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (Files/readAllBytes (expand x (:no-tilde opts))))))
 
-(defn read-lines
-  "Return a (mutable, NOT LAZY) list of strings representing file content.
-
-   *TODO*: think about making this a lazy sequence instead of a wrapper for readAllLines(),
-   which is just too opposite the goals of clojure to expose.  
- 
+(defn read-all-lines
+  "Return a mutable, eager list of strings representing file content.
    The file must exist or an exception is thrown. 
    This is a wrapper around java.nio.file.Files/readAllLines().
   Options:
     :encoding a string or Charset that represents the desired encoding, defaults to UTF-8.
     :no-tilde true/false, whether or not to do tilde expansion."
-  ([x] (read-lines x nil))
+  ([x] (read-all-lines x nil))
   ([x opts]
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (Files/readAllLines (expand x (:no-tilde opts)) (encoding (:encoding opts))))))

@@ -104,7 +104,7 @@
     (assert (not (some file? (dir-children "~"))))))
 
 ;; *TODO*: test these: owner, group, ctime, mtime, atime, file-key, size, file-store,
-;; perm-keys, perm-string, content-type, read-bytes, read-lines, read-symlink,
+;; perm-keys, perm-string, content-type, read-all-bytes, read-all-lines, read-symlink,
 
 (deftest test-directory
   (testing "directory creation/deletion"

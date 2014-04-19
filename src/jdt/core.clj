@@ -3,7 +3,6 @@
   (:import java.io.BufferedReader)
   (:import java.util.Date)
   (:import java.text.SimpleDateFormat)
-  (:use clojure.tools.trace)
   (:require [clojure.walk :as walk])
   (:require [clojure.java.io :as io])
   (:require [clojure.pprint :refer [cl-format]]))
@@ -108,9 +107,14 @@
   (not (nil? value)))
 
 (defn not-empty?
-  "Returns true if the specified collection or sequence is not empty."
-  [value]
-  (not (empty? value)))
+  "Returns coll if the specified collection or sequence is not empty, otherwise nil.
+   (seq coll) is supposed to be idiomatic clojure for this, but I'm uncomfortable with the
+   fact that 'seq' appears to allocate objects instead of just returning a (non-consed) value.
+   So this predicate is not equivalent to (seq coll), because it isn't necessarily going to return a seq."
+  [coll]
+  (if (empty? coll)
+    nil
+    coll))
 
 (defn false-arg-wrap
   "Wraps a function f so that if any arguments passed to f are logically false, the returned function
@@ -614,6 +618,15 @@
            ~@body)
          (finally (.delete file#))))))
 
+
+(defn date->utc
+  "Get a Z suffixed UTC date/time stamp in sortable, filename-friendly form of
+   yyyyMMdd-HHmmssZ."
+  ([] (date->utc (java.util.Date.)))
+  ([^java.util.Date date]
+     (let [formatter (java.text.SimpleDateFormat. "yyyyMMdd-HHmmssX")]
+       (.setTimeZone formatter (java.util.TimeZone/getTimeZone "GMT"))
+       (.format formatter date))))
 
 (defn filename-friendly-timestamp
   "Return a string that makes for an easily typed no-escapes-needed substring of a file name.
