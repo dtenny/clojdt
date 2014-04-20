@@ -1,8 +1,9 @@
 (ns jdt.easyfs-test
   (:use jdt.core)
   (:require [clojure.test :refer :all]
+            [clojure.java.io :refer [as-file input-stream output-stream]]
             [jdt.easyfs :refer :all])
-  (:import java.nio.file.NotDirectoryException))
+  (:import [java.nio.file Path NotDirectoryException]))
 
 ;;; Apologies, this is only tested on linux, it clearly isn't going to work as-is for Windows systems.
 
@@ -256,3 +257,24 @@
     (is (not (exists? f1)))
     (is (= f1 (move f2 f1)))
     (is (delete-if-exists f1))))
+
+(deftest test-copy
+  (let [f1 (as-file (create-temp-file))
+        f2 (as-file (create-temp-file))]
+    (spit f1 "Hello World!")
+    (assert (not= (slurp f1) (slurp f2)))
+    (is (thrown? java.nio.file.FileAlreadyExistsException (copy f1 f2)))
+    (is (instance? Path (copy f1 f2 {:replace true})))
+    (is (= (slurp f1) (slurp f2)))
+    ;; *TODO*: compare file attributes with :preserve option
+    (delete f1)
+    (with-open [stream (output-stream f1)]
+      (is (number? (copy f2 stream))))
+    (is (= (slurp f1) (slurp f2)))
+    (delete f2)
+    (with-open [stream (input-stream f1)]
+      (is (number? (copy stream f2))))
+    (is (= (slurp f1) (slurp f2)))
+    ;; *TODO*: test :replace with an Input or Output stream
+    (is (delete-if-exists f1))
+    (is (delete-if-exists f2))))

@@ -7,7 +7,7 @@
   (:use [jdt.shell :only [bash-tilde-expansion]])
   (:use [jdt.closer :only [ensure-close]])
   (:use [clojure.java.io :exclude [copy]])
-  (:import (java.io File IOException))
+  (:import (java.io File InputStream OutputStream IOException))
   (:import java.net.URI)
   (:import [java.util Date])
   (:import (java.nio.file
@@ -815,19 +815,46 @@
 ;; *TODO*/*FINISH* 
 ;;; newBufferedReader(), newBufferedWriter(), newByteChannel() newInputStream(), newOutputStream()
 
-
 (defn copy
-  "Blah blah blah *FINISH*
+  "Copy from a source to a target, where source is either a path coercible location, or an InputStream,
+   to a target, where target is either a path coercible location, or an OutputStream.
+
+  Returns:
+   The number of bytes copied if source is an InputStream or target is an OutputStream.
+   The path of target if both arguments are path coercible.
+
   Options
-   :follow    If true, follow Symbolic links, otherwise do not follow them, default true.
-              See java.nio.file.LinkOption/NOFOLLOW_LINKS.
-   :preserve  If true, 'copy' attempts to copy file attributes from the source file.
-              See java.nio.file.StandardCopyOption/COPY_ATTRIBUTES.
-   :replace   If true, 'copy' and 'move' will replace a previously existing file, otherwise they will fail.
+   :follow    If true, follow Symbolic source link, otherwise do not follow and copy the link itself.
+              :follow is ignored for target, if the target is a symbolic link and replace semantics
+              apply, the symbolic link is replaced with the source.
+              Default true. See java.nio.file.LinkOption/NOFOLLOW_LINKS.
+   :preserve  If true, 'copy' attempts to copy file attributes from the source if the source results in a
+              Path. See java.nio.file.StandardCopyOption/COPY_ATTRIBUTES.
+   :replace   If true, replace a previously existing target, otherwise fail if target exists.
               Default: false. See java.nio.file.StandardCopyOption/REPLACE_EXISTING.
-   :no-tilde true/false, whether or not to do tilde expansion on source/target arguments."
-  []
-  (println "*FINISH* *TODO*"))
+   :no-tilde true/false, whether or not to do tilde expansion on source/target arguments.
+
+  Exceptions: 
+   UnsupportedOperationException if unsupported copy options are specified.
+   FileAlreadyExistsException if target exists and :replace wasn't specified.
+   DirectoryNotExmptyException if :replace was specified byt target is a non-empty directory.
+   IOException, SecurityException for all the other conceivable and usual reasons.
+
+  *TBD*: If and how to better integrate this with clojure.java.io/copy.
+  Presently this function focuses on calling the java.nio.file.Files method, not being a DWIM copy utility."
+  [source target &[opts]]
+  (let [opts (if opts (merge default-option-values opts) default-option-values)
+        no-tilde (:no-tilde opts)
+        istream? (instance? InputStream source)
+        source (if istream? source (expand source no-tilde))
+        ostream? (instance? OutputStream target)
+        target (if ostream? target (expand target no-tilde))]
+    (cond istream?             ;:replace is only valid CopyOption here        
+          (Files/copy ^InputStream source ^Path target (copy-options opts))
+          ostream?             ;no CopyOptions are valid
+          (Files/copy ^Path source ^OutputStream target)
+          :else                ;both args are paths (:replace, :preserve, :follow) are valid
+          (Files/copy ^Path source ^Path target (copy-options opts)))))
 
 (defn move
   "Move or rename a (path coercible) source to a (path coercible) target file.
