@@ -918,12 +918,15 @@
    Wrapper for java.nio.file.Files.createTempDirectory().
    Throws IOExceptions if unable to create the directory, or if parent directory does not exist.
    Returns a path representing the newly created directory.
+
   Options:
     :permissions as documented in '(options-help :permissions)'.
     :prefix, a string that will be used, if possible, in generating the resulting directory path.
              May be nil.
     :parent, a path coercible argument specifying a parent directory in which to create the resulting path.
-    :no-tilde true/false, whether or not to do tilde expansion on parent, if specified."
+    :no-tilde true/false, whether or not to do tilde expansion on parent, if specified.
+
+  See also: 'with-temp-directory'."
   ([] (create-temp-directory nil))
   ([opts]
      {:pre [(or (and (:prefix opts) (string? (:prefix opts))) true)]}
@@ -1467,5 +1470,44 @@
                 (Files/delete dir))
               FileVisitResult/CONTINUE))))))
 
-;; *FINISH*: with-temporary-{file,directory} in this module, move from jdt.core.  Referenced in doc strings here.
+(defmacro with-temp-file
+  "Execute body with a binding to a temporary file, represented by a Path,
+   that will be created on entry and deleted on exit,  even with a non-local exit from body.
+   Returns the value of body unless an exception is thrown (which is uncaught by this macro).
+   The Path binding will represent a file that exists but is empty.
+   'opts' may have the same values as specified in 'create-temp-file'.
+
+   (with-temporary-file [file {:prefix \"mytemp\"}]
+     (with-open [stream (something-or-other file)]
+        (do-stuff-with-stream stream)))
+
+   See also: jdt.core/with-temporary-file for a similar macro with a java.io.File binding"
+  [[binding opts] & body]
+  (let [sym binding]
+    `(let [path# (create-temp-file ~opts)]
+       (try
+         (let [~sym path#]
+           ~@body)
+         (finally (Files/delete path#))))))
+
+(defmacro with-temp-directory
+  "Execute body with a binding to a temporary Directory that will be created on entry and deleted on exit
+  even with a non-local exit from body.  Returns the value of body unless an exception is thrown,
+  which is uncaught by this macro.  The Path binding will represent a Directory that exists but is empty.
+
+  ** ALL entities created under the resulting temporary directory will be deleted on exit. (If possible).
+
+  Example: 
+  (with-temp-directory [dir]
+    (let [f1 (create-temp-file :parent dir)
+          f2 (create-temp-file :parent dir)]
+      ... do stuff with files/directory ...))
+  ... everything under 'dir' deleted on form exit."
+  [[binding opts] & body]
+  (let [sym binding]
+    `(let [path# (create-temp-directory ~opts)]
+       (try
+         (let [~sym path#]
+           ~@body)
+         (finally (delete-directory path#))))))
 

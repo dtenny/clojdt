@@ -606,7 +606,11 @@
   Example: 
   (with-temporary-file [file]
     (with-open [stream (something-or-other file)]
-       (do-stuff-with-stream stream)))"
+       (do-stuff-with-stream stream)))
+
+  See also: jdt.easyfs/with-temp-file, which deals with Path objects and java.nio.file interfaces,
+  See also: jdt.easyfs/with-temp-directory."
+
   [bindings & body]
   (assert (vector? bindings) "a vector of length 1 for bindings")
   (assert (= (count bindings) 1) "one form in the binding vector")
@@ -618,9 +622,8 @@
            ~@body)
          (finally (.delete file#))))))
 
-
 (defn date->utc
-  "Get a Z suffixed UTC date/time stamp in sortable, filename-friendly form of
+  "Get a Z suffixed UTC date/time string in sortable, filename-friendly form of
    yyyyMMdd-HHmmssZ."
   ([] (date->utc (java.util.Date.)))
   ([^java.util.Date date]

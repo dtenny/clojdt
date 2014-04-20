@@ -278,3 +278,23 @@
     ;; *TODO*: test :replace with an Input or Output stream
     (is (delete-if-exists f1))
     (is (delete-if-exists f2))))
+
+(deftest test-with-temp
+  (let [temp (atom nil)]
+    (with-temp-file [f]
+      (reset! temp f)
+      (is (instance? Path f)))
+    (is (not-exists? @temp))
+    (with-temp-file [f {:prefix "fubar"}]
+      (reset! temp f)
+      (is (re-matches #"fubar.*" (file-name-string f))))
+    (is (not-exists? @temp))
+    (with-temp-directory [d]
+      (reset! temp d)
+      (create-temp-file {:parent d})
+      (create-temp-file {:parent d})
+      (is (= 2 (count (children d)))))
+    (is (not-exists? @temp))))
+
+      
+
