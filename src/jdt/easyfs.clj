@@ -1,7 +1,8 @@
 (ns jdt.easyfs
   "Clojure functions for easy file system manipulation. Requires Java 7.
    Most everything in this module coerces arguments to java.nio.file.Path, and returns Path objects.
-   By default, shell-like tilde expansion is also enabled on inputs to these APIs."
+   By default, shell-like tilde expansion is also enabled on inputs to these APIs.
+   Author: Dave Tenny"
   (:require clojure.string)             ;split-lines
   (:use jdt.core)
   (:use [jdt.shell :only [bash-tilde-expansion]])
@@ -802,16 +803,6 @@
 ;;; File mutators (creation, deletion, copies, updates, attributes, etc)
 ;;;
 
-;; Clojure.java.io has some flexible copy stuff we don't want to reproduce if we can avoid it.
-;; Inputs=(InputStream,Reader,File,byte[],String)
-;; Outputs=(OutputStream,Writer,File)
-;; Options=(buffer-size,encoding)
-
-;; java.nio.file.Files supports
-;; Inputs=(Path,InputStream)
-;; Outputs=(Path,OutputStream)
-;; Options=(ATOMIC_MOVE, COPY_ATTRIBUTES, REPLACE_EXISTING, NOFOLLOW_LINKS)
-
 ;; *TODO*/*FINISH* 
 ;;; newBufferedReader(), newBufferedWriter(), newByteChannel() newInputStream(), newOutputStream()
 
@@ -1498,7 +1489,7 @@
   ** ALL entities created under the resulting temporary directory will be deleted on exit. (If possible).
 
   Example: 
-  (with-temp-directory [dir]
+  (with-temp-directory [dir {:prefix \"mytmp\"}]
     (let [f1 (create-temp-file :parent dir)
           f2 (create-temp-file :parent dir)]
       ... do stuff with files/directory ...))
