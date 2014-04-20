@@ -32,9 +32,6 @@
   (testing "file?"
     (assert (file? "~/.bashrc"))
     (assert (not (file? "~")))))
-;; *TODO*: test symbolic links with 'file?'
-
-;; *FINISH*: test 'link?'
 
 (deftest test-exe
   (testing "exe?"
@@ -102,9 +99,6 @@
 (deftest test-dir-children
   (testing "dir-children"
     (assert (not (some file? (dir-children "~"))))))
-
-;; *TODO*: test these: owner, group, ctime, mtime, atime, file-key, size, file-store,
-;; perm-keys, perm-string, content-type, read-all-bytes, read-all-lines, read-symlink,
 
 (deftest test-directory
   (testing "directory creation/deletion"
@@ -223,3 +217,42 @@
       (is (create-file file))
       (is (exists? file))
       (is (delete-if-exists file)))))
+
+(deftest test-links
+  (let [soft "/tmp/softlink"
+        hard "/tmp/hardlink"]
+    (delete-if-exists soft)
+    (delete-if-exists hard)
+    (let [tfile (create-temp-file)
+          softlink (create-symbolic-link soft tfile)
+          hardlink (create-link hard tfile)]
+      (is (exists? softlink))
+      (is (symlink? softlink))
+      (is (exists? hardlink))
+      (is (not (symlink? hardlink)))
+      (is (delete-if-exists hardlink))
+      (is (exists? tfile))
+      (is (delete-if-exists tfile))
+      (is (symlink? softlink))
+      (is (exists? softlink {:follow nil}))
+      (is (delete-if-exists softlink)))))
+
+;; *TODO*: test these: owner, group, ctime, atime, file-key, size, file-store,
+;; perm-keys, perm-string, content-type, read-all-bytes, read-all-lines, read-symlink,
+
+(deftest test-mtime
+  (let [ttime (mtime "/")
+        tfile (create-temp-file)]
+    (is (not= ttime (mtime tfile)))
+    (set-last-modified-time tfile ttime)
+    (is (= ttime (mtime tfile)))
+    (delete tfile)))
+        
+(deftest test-move
+  (let [f1 (create-temp-file)
+        f2 (create-temp-file)]
+    (is (thrown? java.nio.file.FileAlreadyExistsException (move f1 f2)))
+    (is (= f2 (move f1 f2 {:replace true})))
+    (is (not (exists? f1)))
+    (is (= f1 (move f2 f1)))
+    (is (delete-if-exists f1))))

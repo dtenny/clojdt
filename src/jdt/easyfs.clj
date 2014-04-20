@@ -6,15 +6,17 @@
   (:use jdt.core)
   (:use [jdt.shell :only [bash-tilde-expansion]])
   (:use [jdt.closer :only [ensure-close]])
-  (:use clojure.java.io)
+  (:use [clojure.java.io :exclude [copy]])
   (:import (java.io File IOException))
   (:import java.net.URI)
+  (:import [java.util Date])
   (:import (java.nio.file
+            CopyOption
             DirectoryStream DirectoryStream$Filter Files FileSystems FileSystem FileVisitor FileVisitResult
-            LinkOption Path Paths PathMatcher SimpleFileVisitor))
+            LinkOption Path Paths PathMatcher SimpleFileVisitor StandardCopyOption))
   (:import (java.nio.file.attribute
             BasicFileAttributes PosixFileAttributes DosFileAttributes
-            FileAttribute PosixFilePermission PosixFilePermissions UserPrincipal))
+            FileAttribute FileTime PosixFilePermission PosixFilePermissions UserPrincipal))
   (:import java.nio.charset.Charset)
   )
 
@@ -55,6 +57,33 @@
   (if x
     (into-array LinkOption [])
     (into-array LinkOption [LinkOption/NOFOLLOW_LINKS])))
+
+(defn copy-option
+  "Given a map entry e, return a CopyOption object if it specifies a true value corresponding
+   to a CopyOption or nil if it does not refer to a copy option or it the corresponding value is false.
+   Note that not all CopyOption objects are valid for both copy and move functions."
+  [e]
+  (let [k (key e)
+        v (val e)]
+    (cond
+     ;; Standard copy options
+     (and (= k :atomic) v)
+     StandardCopyOption/ATOMIC_MOVE
+     (and (= k :preserve) v)
+     StandardCopyOption/COPY_ATTRIBUTES
+     (and (= k :replace) v)
+     StandardCopyOption/REPLACE_EXISTING
+     ;; Link options, see 'follow'
+     (and (= k :follow) (not v))
+     LinkOption/NOFOLLOW_LINKS)))
+
+(defn- copy-options
+  "Convert appropriate keywords correspending to java.nio.file.CopyOption values.
+   Note that LinkOption is a subtype of CopyOption, so this method overlaps 'follow' in
+   options matched."
+  [opts]
+  (into-array CopyOption
+              (filterv not-nil? (mapv copy-option (seq opts)))))
 
 (defn- posix-file-permission-enum
   "Return the the java java.nio.file.attribute.PosixFilePermission enum
@@ -168,10 +197,17 @@
     "Keys representing options recognized in this module.
      Not all functions take all options.  This variable is for documentation purposes."}
   valid-option-keys
-  {:encoding "string or Charset, converted to charset, specifying byte<->char encodings, default UTF-8"
-   :no-tilde "if true do not perform Bash style tilde expansion in pathnames, default false"
-   :follow   "if true, follow Symbolic links, otherwise do not follow them, default true"
-   :accept   "predicate of one argument, a path, return true if path should be kept, false if discarded,
+  {:encoding "string or Charset, converted to charset, specifying byte<->char encodings, default UTF-8."
+   :no-tilde "If true do not perform Bash style tilde expansion in pathnames, default false."
+   :follow   "If true, follow Symbolic links, otherwise do not follow them, default true.
+              See java.nio.file.LinkOption/NOFOLLOW_LINKS."
+   :atomic   "If true, 'move' attempts to perform an atomic operation with respect to the file system.
+              See java.nio.file.StandardCopyOption/ATOMIC_MOVE."
+   :preserve "If true, 'copy' attempts to copy file attributes from the source file.
+              See java.nio.file.StandardCopyOption/COPY_ATTRIBUTES."
+   :replace  "If true, 'copy' and 'move' will replace a previously existing file, otherwise they will fail.
+              Default: false. See java.nio.file.StandardCopyOption/REPLACE_EXISTING."
+   :accept   "Predicate of one argument, a path, return true if path should be kept, false if discarded,
              default: none."
    :glob     "A string specifying a globbing pattern as documented in 
              documented in java.nio.file.FileSystem.getPathMatcher() or nil/absent.  Default: none.
@@ -318,13 +354,13 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (Files/isRegularFile (expand x (:no-tilde opts)) (follow (:follow opts))))))
 
-(defn link?
+(defn symlink?
   "Return true if x (a path coercible thing) exists and is a symbolic link, false otherwise.
    This is a wrapper around java.nio.file.Files/isSymbolicLink().
    Whether it follows symbolic links is undocumented.
   Options:
     :no-tilde true/false, whether or not to do tilde expansion."
-  ([x] (link? x nil))
+  ([x] (symlink? x nil))
   ([x opts]
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (Files/isSymbolicLink (expand x (:no-tilde opts))))))
@@ -420,6 +456,16 @@
   ([x opts]
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (.getName (Files/getAttribute (expand x (:no-tilde opts)) "posix:group" (follow (:follow opts)))))))
+
+(defn file-time-to-date
+  "Convert java.nio.file.attribute.FileTime to java.util.Date"
+  [^FileTime file-time]
+  (Date. (.toMillis file-time)))
+
+(defn date-to-file-time
+  "Convert java.util.Date to java.nio.file.attribute.FileTime"
+  [^Date date]
+  (FileTime/fromMillis (.getTime date)))
 
 (defn ctime
   "Return a java.nio.file.attribute.FileTime with the creation modification time of the file.
@@ -766,9 +812,45 @@
 ;; Outputs=(Path,OutputStream)
 ;; Options=(ATOMIC_MOVE, COPY_ATTRIBUTES, REPLACE_EXISTING, NOFOLLOW_LINKS)
 
-;; *TODO*/*FINISH* copy(), createSymbolicLink(), createLink(), 
+;; *TODO*/*FINISH* 
 ;;; newBufferedReader(), newBufferedWriter(), newByteChannel() newInputStream(), newOutputStream()
 
+
+(defn copy
+  "Blah blah blah *FINISH*
+  Options
+   :follow    If true, follow Symbolic links, otherwise do not follow them, default true.
+              See java.nio.file.LinkOption/NOFOLLOW_LINKS.
+   :preserve  If true, 'copy' attempts to copy file attributes from the source file.
+              See java.nio.file.StandardCopyOption/COPY_ATTRIBUTES.
+   :replace   If true, 'copy' and 'move' will replace a previously existing file, otherwise they will fail.
+              Default: false. See java.nio.file.StandardCopyOption/REPLACE_EXISTING.
+   :no-tilde true/false, whether or not to do tilde expansion on source/target arguments."
+  []
+  (println "*FINISH* *TODO*"))
+
+(defn move
+  "Move or rename a (path coercible) source to a (path coercible) target file.
+   Returns a Path to the target file.    Wrapper for java.nio.file.Files.move().
+   Fails if the target file already exists unless source and target files are the same.
+   If the source is a symbolic link, then the symbolic link itself is moved, not the target of the link.
+  Options
+   :atomic    If true, 'move' attempts to perform an atomic operation with respect to the file system.
+              See java.nio.file.StandardCopyOption/ATOMIC_MOVE.
+   :replace   If true, 'copy' and 'move' will replace a previously existing file, otherwise they will fail.
+              Default: false. See java.nio.file.StandardCopyOption/REPLACE_EXISTING.
+   :no-tilde true/false, whether or not to do tilde expansion on source/target arguments.
+  Exceptions:
+   UnsupportedOperationException if unsupported copy options are specified.
+   FileAlreadyExistsException if target exists and :replace wasn't specified.
+   DirectoryNotExmptyException if :replace was specified byt target is a non-empty directory.
+   AtomicMoveNotSupportedException if :atomic was requested but the move cannot be done atomically.
+   IOException, SecurityException for all the other conceivable and usual reasons."
+  ([source target] (move source target nil))
+  ([source target opts] 
+     (let [opts (if opts (merge default-option-values opts) default-option-values)
+           no-tilde (:no-tilde opts)]
+       (Files/move (expand source no-tilde) (expand target no-tilde) (copy-options opts)))))
 
 (defn create-directory
   "Create a single directory.  Wrapper for java.nio.file.Files.createDirectory().
@@ -867,6 +949,45 @@
                                (:prefix opts) (:suffix opts) (file-attributes opts))
          (Files/createTempFile (:prefix opts) (:suffix opts) (file-attributes opts))))))
 
+(defn create-link
+  "Create a 'hard' link to a file.
+   Returns the path to the link.
+   Wrapper for java.nio.file.Files.createLink().
+
+   'link' - the (path coercible) link to be created.
+   'existing' - the (path coercible) path to an existing file.
+
+   Throws various exceptions including UnsupportedOperationException, IOException,
+   FileAlreadyExistsException, and SecurityException.
+
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion input path arguments."
+  ([link existing] (create-link link existing nil))
+  ([link existing opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)
+           no-tilde (:no-tilde opts)]
+       (Files/createLink (expand link no-tilde) (expand existing no-tilde)))))
+
+(defn create-symbolic-link
+  "Create a symbolic link to a file.
+   Returns the path to the link.
+   Wrapper for java.nio.file.Files.createSymbolicLink().
+
+   'link' - the (path coercible) link to be created.
+   'target' - the (path coercible) path to be linked, does not need to designate an existing file.
+
+   Throws various exceptions including UnsupportedOperationException, IOException,
+   FileAlreadyExistsException, and SecurityException.
+
+  Options:
+    :permissions as documented in '(options-help :permissions)'.
+    :no-tilde true/false, whether or not to do tilde expansion input path arguments."
+  ([link target] (create-symbolic-link link target nil))
+  ([link target opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)
+           no-tilde (:no-tilde opts)]
+       (Files/createSymbolicLink (expand link no-tilde) (expand target no-tilde) (file-attributes opts)))))
+
 (defn delete
   "Delete the file/directory/link specified by (path coercible) path.
    Wrapper for java.nio.file.Files.delete().
@@ -953,9 +1074,23 @@
      (let [opts (if opts (merge default-option-values opts) default-option-values)]
        (Files/setAttribute (expand path (:no-tilde opts)) attribute value (follow (:follow opts))))))
 
-;; *FINISH*: rest of file apis
-;;;static Path	setLastModifiedTime(Path path, FileTime time)
+(defn set-last-modified-time
+  "Sets the modification time for the (Path coercible) path.
+   This is a wrapper around java.nio.file.Files/setLastModifiedTime().
+   Returns the Path of the file.
+   Time may be a java.nio.file.attribute.FileTime object or a java.util.Date object.
+   Throws IOException if we can't update the file properties, or SecurityException if appropriate.
+   See also 'mtime'.
 
+  Options:
+    :no-tilde true/false, whether or not to do tilde expansion."
+  ([path time] (set-last-modified-time path time nil))
+  ([path time opts]
+     (let [opts (if opts (merge default-option-values opts) default-option-values)
+           time (if (instance? Date time)
+                  (date-to-file-time time)
+                  time)]
+       (Files/setLastModifiedTime (expand path (:no-tilde opts)) time))))
 
 
 ;;
