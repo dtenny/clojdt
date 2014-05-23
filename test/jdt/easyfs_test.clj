@@ -34,16 +34,20 @@
     (assert (file? "~/.bashrc"))
     (assert (not (file? "~")))))
 
+(def ls-loc
+  (or (probe-file "/usr/bin/ls") ;fedora
+      (probe-file "/bin/ls")))   ;centos
+
 (deftest test-exe
   (testing "exe?"
     (assert (not (exe? "~/.bashrc")))
-    (assert (exe? "/usr/bin/ls"))))
+    (assert (exe? ls-loc))))
 ;; *TODO*: test symbolic links and following(?) with exe?
 
 (deftest test-hidden
   (testing "hidden?"
     (assert (hidden? "~/.bashrc"))
-    (assert (not (hidden? "/usr/bin/ls")))))
+    (assert (not (hidden? ls-loc)))))
 
 (deftest test-readable
   (testing "readable?"

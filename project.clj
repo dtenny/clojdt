@@ -1,4 +1,4 @@
-(defproject jdt "0.1.0"
+(defproject jdt "0.1.1-SNAPSHOT"
   :description "These are not the tools you're looking for."
   :url "https://github.com/dtenny/clojdt"
   :scm {:name "git"

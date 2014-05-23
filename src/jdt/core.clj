@@ -449,6 +449,49 @@
 ;;(printlines '(a b c))
 ;;(printlines 1 '(2 3 4) [5 6 7])
 
+(defn pr-to
+  [writer & objects]
+  "Bind *out* to writer, invoke 'pr' on objects.  Return nil."
+  (binding [*out* writer] (apply pr objects)))
+
+(defn prn-to
+  [writer & objects]
+  "Bind *out* to writer, invoke 'prn' on objects.  Return nil."
+  (binding [*out* writer] (apply prn objects)))
+
+(defn print-to
+  [writer & objects]
+  "Bind *out* to writer, invoke 'print' on objects.  Return nil."
+  (binding [*out* writer] (apply print objects)))
+
+(defn println-to
+  [writer & objects]
+  "Bind *out* to writer, invoke 'println' on objects.  Return nil."
+  (binding [*out* writer] (apply println objects)))
+
+(defn printlines-to
+  [writer & args]
+  "Bind *out* to writer, invoke 'printlines' on args.  Return nil."
+  (binding [*out* writer] (apply printlines args)))
+
+(defn append-to-file
+  "Append string to File coercible file-spec."
+  [file-spec string]
+  (with-open [w (io/writer file-spec :append true)]
+    (println-to w string)))
+
+(defn has-repl?
+  "Return true if we appear to be running with a REPL, false otherwise."
+  []
+  ;; *TBD*: Consider looking for some particular repl routine in jvm stack traces
+  ;; Don't care about the clojure.* prop vals, just that the property exists.
+  (if (or (System/getProperty "clojure.debug") 
+          (System/getProperty "clojure.compile.path")
+          (if-let [command (System/getProperty "sun.java.command")] ;sun jvm specific
+            (.contains command "clojure.main")))
+    true
+    false))
+
 (defn readlines
   "Given some I/O source compatible with clojure.java.io/reader (which will be closed),
   return a vector of lines readable from the source.
@@ -629,6 +672,17 @@
   ([^java.util.Date date]
      (let [formatter (java.text.SimpleDateFormat. "yyyyMMdd-HHmmssX")]
        (.setTimeZone formatter (java.util.TimeZone/getTimeZone "GMT"))
+       (.format formatter date))))
+
+(defn date->local
+  "Get a local timezone suffixed date/time string in a NOT QUITE fully sortable,
+  filename-friendly form of yyyyMMdd-HHmmss[+-]NNNN.  I you want a fully sortable
+  timestamp try 'date->utc' or strip off the timezone suffix.
+  This method is suitable for build logs and such, just more difficult to sort with,
+  say, bash shell utilities than the output of date->utc."
+  ([] (date->local (java.util.Date.)))
+  ([^java.util.Date date]
+     (let [formatter (java.text.SimpleDateFormat. "yyyyMMdd-HHmmssZ")]
        (.format formatter date))))
 
 (defn filename-friendly-timestamp
