@@ -266,14 +266,14 @@
    If x is a non-list collection return a list for it.
    If x is a sequence, return it as a list.
    Nil is given special treatment and is turned into an empty list
-   however false is not converted into an empty sequence."
+   however false is not converted into an empty sequence.
+   Element order is retained so that sorted inputs preserve their order."
   [x]
   (cond (list? x) x
-        (seq? x) (into () x)
-        (coll? x) (into () x)
+        (seq? x) (apply list x)
+        (coll? x) (apply list x)
         (nil? x) ()
         :else (list x)))
-
 
 ;; (use 'clojure.walk) -> provides macroexpand-all, useful sometimes where macroexpand isn't enough
 ;; recursive macros like and-let being one of those cases
