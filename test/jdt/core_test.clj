@@ -27,6 +27,23 @@
     (is (= (cl-find 0 '(1 -1 2 3 0) :start 1 :from-end true :test >) -1))
     ))
 
+(deftest test-cl-eql
+  (is (cl-eql 'a 'a))
+  (is (cl-eql :b :b))
+  (is (cl-eql \a \a))
+  (is (not (cl-eql \a \b)))
+  (is (cl-eql 1 1))
+  (is (cl-eql 1.0 1.0))
+  (is (cl-eql "a" "a")) ; true in clojure/jvm (interned strings), false in lisp, that's okay
+  (is (not (cl-eql "a" "b"))))
+
+(deftest test-cl-member
+  (is (= (cl-member 2 '(1 2 3)) '(2 3)))
+  (is (= (cl-member 2 '()) nil))
+  (is (= (cl-member 1 '(1 2 3)) '(1 2 3)))
+  (is (= (cl-member 1 '(1 2 3) :key (fn [x] (- x 1))) '(2 3)))
+  (is (= (cl-member 'a '(b c d) :test (fn [x y] (not= x y))) '(b c d))))
+
 (deftest test-assoc-if
   (testing "assoc-if"
     (let [l '[:a a :b b :c nil :d false]]
@@ -48,8 +65,9 @@
 
 (deftest map-matches-1
   (testing "map-matches"
-    (is (= (map-matches "abc" (seq {:b-key "b" :a-key "a" :d-key "d"}) contained-in-string?)
-           '(:b-key :a-key)))))
+    ;; Use set equality to eliminate dependency on sequence order of keys from map implementation changes.
+    (is (= (into #{} (map-matches "abc" (seq {:b-key "b" :a-key "a" :d-key "d"}) contained-in-string?))
+           (into #{} '(:b-key :a-key))))))
 
 (def ^:dynamic *lines*
   ["Zzzzzzzzzzzz"
@@ -86,11 +104,14 @@
 
 (deftest test-get-indexes
   (testing "get-indexes"
-    (is (= (get-indexes {:a 1 :b ["c" "d"]} [])
-           '((:a) (:b 0) (:b 1))))
+    ;; Use set equality to avoid map ordering dur to changes in map implementations as clojure/java
+    ;; changes (and thus order of sequence output from maps).
+    (is (= (into #{} (seq (get-indexes {:a 1 :b ["c" "d"]} [])))
+           (into #{} '((:a) (:b 0) (:b 1)))))
     (let [form {:a 1 :b [{:c 2 :d [{:e 3 :f "abc"}]} {:g 1}]}
           indices (get-indexes form [])]
-      (is (= indices '((:a) (:b 0 :c) (:b 0 :d 0 :f) (:b 0 :d 0 :e) (:b 1 :g))))
+      (is (= (into #{} indices)
+             (into #{} '((:a) (:b 0 :c) (:b 0 :d 0 :f) (:b 0 :d 0 :e) (:b 1 :g)))))
       (is (= (get-in form (nth indices 2)) "abc")))
     (let [form [10 11 12 {:a 1} [:b :c :d] {:e {:f :g}}]
           indices (get-indexes form [])]

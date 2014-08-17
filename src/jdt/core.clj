@@ -199,6 +199,46 @@
       (some (fn [x] (let [y (keyfn x)] (if (testfn item y) x))) sequence)
       (some (fn [x] (if (testfn item x) x)) sequence))))
 
+(def cl-eq
+  "A version of the comon lisp eq predicate."
+  identical?)
+
+(defn cl-eql
+  "A version of the common lisp eql predicate.
+    The value of eql is true of two objects, x and y, in the folowing cases:
+    1. If x and y are cl-eq.
+    2. If x and y are both numbers of the same type and the same value.
+    3. If they are both characters that represent the same character."
+  ;; Clojure's identical? does not work like lisps for things like floats, symbols, etc.
+  ;; We may need additional adjustments to this function.
+  [a b]
+  (cond (number? a) (== a b) ; (identical? 1.0 1.0) -> false, (identical? 1 1) => true
+                             ; (identical? 1.0 1) -> false
+        (symbol? a) (= a b) ; (identical? 'a 'a) -> false, (identical? :b :b) -> true
+        :else (cl-eq  a b)))
+
+(defn cl-member
+  "A version of the common lisp 'member' function, for which I could not find a roughly equivalent
+   clojure function.
+
+   Search list for item or for a top-level element that satisfies the test.
+   The argument to the predicate function is an element of list.
+   If some element satisfies the test, the tail of list beginning with this element is returned;
+   otherwise nil is returned. List is searched on the top level only.
+
+   test - a designator for a function of two arguments that returns a generalized boolean.
+   key - a designator for a function of one argument, or nil.
+
+   Example: (cl-member 2 '(1 2 3)) =>  (2 3)"
+  [item list & {:keys [key test]
+                :or {key identity test cl-eql}}]
+  (loop [list list]
+    (if (empty? list)
+      nil
+      (if (test item (key (first list)))
+        list
+        (recur (rest list))))))
+
 (defn each
   "Return a lazy sequence containing every element in seq for which predicate returns logical true."
   [pred seq]
