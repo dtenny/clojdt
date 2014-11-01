@@ -274,15 +274,16 @@
        (and-let ~(drop 2 bindings) ~@body))
     `(do ~@body)))
 
-(comment  ;; no #| |# block comment in clojure, alas
-(println "A")(and-let [x nil y 1] (println x) (println y))
-(println "B")(and-let [x 1 y nil] (println x) (println y))
-(println "C")(and-let [x false y nil] (println x) (println y))
-(println "D")(and-let [x true y 1] (println x) (println y))
-(println "E")(and-let [x true] x)
-)
-
 (defn seqable? "True if x can be turned into a seq via 'seq'"
+  [x]
+  (or (seq? x)
+      (coll? x)
+      (list? x)
+      (string? x)))
+
+(defn seqable-except-strings?
+  "True if x can be turned into a seq via 'seq', except for strings which are seqable but not always
+   desireable as seqs of chars."
   [x]
   (or (seq? x)
       (coll? x)
@@ -293,9 +294,14 @@
    If x is a collection return a sequence for it.
    If x is a sequence, return it as is.
    Nil is given special treatment and is turned into an empty sequence,
-   however false is nto converted into an empty sequence."
+   however false is nto converted into an empty sequence.
+
+   ** NOTE **: we do NOT convert strings into sequences, though they are seqable.  But that defeats
+   most use cases for this function."
   [x]
   (cond (seq? x) x
+        ;; The string case is deliberately omitted here.
+        ;; (string? x) (seq x)             ;note that (seq "") => nil
         (coll? x) (seq x)
         (nil? x) ()
         :else (list x)))
@@ -490,29 +496,34 @@
 ;;(printlines 1 '(2 3 4) [5 6 7])
 
 (defn pr-to
-  [writer & objects]
   "Bind *out* to writer, invoke 'pr' on objects.  Return nil."
+  [writer & objects]
   (binding [*out* writer] (apply pr objects)))
 
 (defn prn-to
-  [writer & objects]
   "Bind *out* to writer, invoke 'prn' on objects.  Return nil."
+  [writer & objects]
   (binding [*out* writer] (apply prn objects)))
 
 (defn print-to
-  [writer & objects]
   "Bind *out* to writer, invoke 'print' on objects.  Return nil."
+  [writer & objects]
   (binding [*out* writer] (apply print objects)))
 
 (defn println-to
-  [writer & objects]
   "Bind *out* to writer, invoke 'println' on objects.  Return nil."
+  [writer & objects]
   (binding [*out* writer] (apply println objects)))
 
 (defn printlines-to
-  [writer & args]
   "Bind *out* to writer, invoke 'printlines' on args.  Return nil."
+  [writer & args]
   (binding [*out* writer] (apply printlines args)))
+
+(defn flush-to
+  "Flush *out* to writer.  Return nil."
+  [writer]
+  (binding [*out* writer] (flush)))
 
 (defn append-to-file
   "Append string to File coercible file-spec."
@@ -762,7 +773,7 @@
    all predicates in (1) return true.
    If there are no predicates input, return nil.
 
-   Example: to obtain a predicate that returns true only if its argument is both positive and even:
+   Examhimple: to obtain a predicate that returns true only if its argument is both positive and even:
    (let [pred (merge-predicates even? pos?)]
      (pred 2)) => true"
   [& args]
@@ -779,7 +790,7 @@
   (cond
    (map? form)
    (mapcat (fn [e] (get-indexes (val e) (concat result [(key e)]))) form)
-   (seqable? form)
+   (seqable-except-strings? form)
    (reduce concat (map-indexed (fn [i val] (get-indexes val (concat result [i]))) form))
    :else [result]))
 

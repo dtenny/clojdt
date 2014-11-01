@@ -52,17 +52,23 @@
       (is (= (assoc-if {} nil :a 'a) {:a 'a}))
       (is (= (apply assoc-if {:g "g"} (fn [k v] (not (nil? v))) l)) {:d false, :b 'b, :a 'a, :g "g"}))))
   
+(deftest test-and-let
+  (is (nil? (and-let [x nil y 1] [x y])))
+  (is (nil? (and-let [x 1 y nil] [x y])))
+  (is (nil? (and-let [x false y nil] [x y])))
+  (is (= (and-let [x true y 1] [x y]) [true 1]))
+  (is (= (and-let [x true] x) true)))
+
 (deftest test-seqable?
   (testing "seqable?"
     (is (seqable? ()))
     (is (seqable? {}))
     (is (seqable? []))
     (is (seqable? #{}))
+    (is (seqable? "abc"))
     (is (seqable? (list)))
     (is (not (seqable? nil)))))
         
-        
-
 (deftest map-matches-1
   (testing "map-matches"
     ;; Use set equality to eliminate dependency on sequence order of keys from map implementation changes.
