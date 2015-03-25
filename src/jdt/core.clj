@@ -794,3 +794,29 @@
    (reduce concat (map-indexed (fn [i val] (get-indexes val (concat result [i]))) form))
    :else [result]))
 
+(defn remove-key-value-pair 
+  "Return a lazy seq or the input sequence, such that if 'k' is in the input seq 's',
+  it is treated as a keyword/value pair, and the keyword and value are removed.
+  Only the first such k/v pair is removed.
+  This function does not detect or complain about missing values for the keyword.
+  This function does not care if the list has an odd or even number of values,
+  so if the input has an odd number of values a value could be mistaken for a keyword."
+  [k s]
+  (let [seqs (partition-by (fn [i] (= i k)) s)
+        n-seqs (count seqs)]
+    (println seqs)
+    (if (= n-seqs 1)
+      s                                 ;k wasn't in s
+      (if (= n-seqs 2)
+        (first seqs)                    ;k wasn't followed by any additional tokens
+        (concat (first seqs) (rest (nth seqs 2)))))))
+
+(defn get-key-value 
+  "Return the value associated value for keyword 'k' in sequence 's', or 'missing-value' if it
+   is not found.  If 'k' is the last element in 's' nil is returned, not missing-value."
+  [k s & [missing-value]]
+  (let [tail (drop-while (fn [i] (not (= i k))) s)]
+    (if tail
+      (fnext tail)
+      missing-value)))
+
