@@ -2,7 +2,7 @@
   jdt.ssh
   (:require [jdt.core :refer [remove-key-value-pair get-key-value]])
   (:require [jdt.easyfs :refer [as-path abs-path parent file-name-string probe-file size]])
-  (:require [clojure.java.io :refer [copy input-stream]])
+  (:require [clojure.java.io :refer [copy input-stream output-stream]])
   (:require [clojure.string :as string])
   (:import [ch.ethz.ssh2 Connection HTTPProxyData Session StreamGobbler SCPClient]))
 
@@ -152,6 +152,35 @@
 ;; re: SCP: you'll want to read this
 ;; http://docstore.mik.ua/orelly/networking_2ndEd/ssh/ch03_08.htm
 ;; scp: undocumented -t is "to", -f is "from".
+(defn- with-scp-client 
+  "Set up an SCPClient instance and invoke function 'f' on it.  Return whatever 'f' returns.
+  Keywords:
+  :args               a (possibly empty) list of arguments for 'f'.  Typically source/dest pathnames.
+                      The arguments are passed to 'f' after the SCPClient object via 'apply'.
+                      'f' must take at least on argument (the SCPClient object), any more depends on 
+                      what is passed via args (if any).
+  :private-key string specifying path to a private key file, analogous to '-i' in ssh command. Required.
+  :target-user string specifying the name of the user on the remote host. Required.
+  :target-host string specifying the remote host IP or DNS address. Required.
+  :proxy-host  string specifying the proxy host IP or DNS address, if a proxy is to be used. Optional.
+  :proxy-port  integer specifying the proxy host port number. Required if proxy-host specified.
+  :verbose     if true, print out other parameters before trying to connect."
+  [f & {:keys [args private-key target-user target-host proxy-host proxy-port verbose]}]
+  {:pre [target-user target-host (if proxy-port (number? proxy-port) true)]}
+  (if verbose
+    (println "scp" :private-key private-key :target-user target-user 
+             :proxy-host proxy-host :proxy-port proxy-port))
+  (with-open [connection (Connection. target-host)]
+    (if proxy-host
+      (.setProxyData connection (HTTPProxyData. proxy-host proxy-port)))
+    (.connect connection)
+    (if private-key
+      (if-not (.authenticateWithPublicKey connection
+                                          target-user (java.io.File. private-key) nil)
+        (throw (Exception. (str "Unable to authenticate as user " target-user
+                                " with key file " private-key)))))
+    (apply f (SCPClient. connection) args)))
+      
 (defn scp-to
   "Perform scp command to target-host via ssh client on local host.
   Return the number of bytes copied if we succeed, nil (or throw an exception) if we fail.
@@ -159,7 +188,7 @@
   Most parameters are specified by keyword, but that doesn't necessarily mean they're optional.
   'source-path' string indicating path of file to be copied out.
   'dest-path'   string describing the path of the file to be created on the remote host.
-  Any directory in the path is assumed to exist on the remote host.
+  Any directory in the dest-path is assumed to exist on the remote host.
   
   Keywords:
   :private-key string specifying path to a private key file, analogous to '-i' in ssh command. Required.
@@ -168,11 +197,7 @@
   :proxy-host  string specifying the proxy host IP or DNS address, if a proxy is to be used. Optional.
   :proxy-port  integer specifying the proxy host port number. Required if proxy-host specified.
   :verbose     if true, print out other parameters before trying to connect."
-  [source-path dest-path & {:keys [private-key target-user target-host proxy-host proxy-port verbose]}]
-  {:pre [target-user target-host (if proxy-port (number? proxy-port) true)]}
-  (if verbose
-    (println "scp" :private-key private-key :target-user target-user 
-             :proxy-host proxy-host :proxy-port proxy-port))
+  [source-path dest-path & args]
   (let [local-path (abs-path (as-path source-path))
         local-path-dir-string (str (parent local-path))
         local-file-name-string (file-name-string local-path)
@@ -183,19 +208,39 @@
         byte-length (and path-to-read (size path-to-read))]
     (if-not path-to-read
       (throw (Exception. (str source-path " does not exist or cannot be read."))))
-    (with-open [connection (Connection. target-host)]
-      (if proxy-host
-        (.setProxyData connection (HTTPProxyData. proxy-host proxy-port)))
-      (.connect connection)
-      (if private-key
-        (if-not (.authenticateWithPublicKey connection
-                                            target-user (java.io.File. private-key) nil)
-          (throw (Exception. (str "Unable to authenticate as user " target-user
-                                  " with key file " private-key)))))
-      (let [scp-client (SCPClient. connection)]
-        (with-open [put-stream (.put scp-client remote-path-file-name-string byte-length remote-path-dir-string nil)]
-          (with-open [in-stream (input-stream source-path)]
-            (copy in-stream put-stream)
-            ))))
-    byte-length))
+    (apply with-scp-client
+           (fn [scp-client]
+             (with-open [put-stream (.put scp-client remote-path-file-name-string byte-length remote-path-dir-string nil)]
+               (with-open [in-stream (input-stream source-path)]
+                 (copy in-stream put-stream)
+                 ))
+             byte-length)
+           args)))
+
+(defn scp-from
+  "Perform scp command from target-host via ssh client on local host.
+   Returns nil if we succeed or throws an Exception otherwise.
+
+  Most parameters are specified by keyword, but that doesn't necessarily mean they're optional.
+  'source-path' string indicating path of file to be copied in from the remote host.
+  'dest-path'   string describing the path of the file to be created on the local host.
+  Any directory in the dest-path is assumed to exist on the local host.
+  
+  Keywords:
+  :private-key string specifying path to a private key file, analogous to '-i' in ssh command. Required.
+  :target-user string specifying the name of the user on the remote host. Required.
+  :target-host string specifying the remote host IP or DNS address. Required.
+  :proxy-host  string specifying the proxy host IP or DNS address, if a proxy is to be used. Optional.
+  :proxy-port  integer specifying the proxy host port number. Required if proxy-host specified.
+  :verbose     if true, print out other parameters before trying to connect."
+  [source-path dest-path & args]
+  ;; Try to open local path before we establish the connection, to fail-fast if necessary
+  ;; due to permissions and whatnot.
+  (with-open [out-stream (output-stream dest-path)]
+    (apply with-scp-client
+           (fn [scp-client]
+               (with-open [in-stream (.get scp-client source-path)]
+                 (copy in-stream out-stream)))
+           args)))
+      
 
