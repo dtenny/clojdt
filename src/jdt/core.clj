@@ -158,6 +158,35 @@
    (= "y"
       (until (re-matches #"[yn]" (prompt prompt-string))))))
 
+(defn exception-retry
+  "Call function f with exception handler fe.  If an
+   exception is thrown by f, call fe on the exception, and then call f again
+   if the result of calling fe is logically true or unless fe throws.
+
+   If f completes execution without throwing we return the return value of f.
+   If f throws and fe returns logical false, return nil.
+
+   f must not return a function, this is prohibited and will result in an exception.
+
+   This function is a non-recursive workaround for situations for where
+   you want to recurse in a catch/finally statement (i.e. retry a try block in the face of
+   exceptions thrown from the try block).  You can't use 'recur' in catch/finally.
+   This works around it.
+
+   E.g. (loop [] (try (f) (catch Exception e (recur)))) ; WILL NOT WORK
+   but  (exception-retry f (fn [] true)) ; WILL WORK
+
+   In practice you want fe to examine the exception raised
+   and probably sleep before returning to try f again.  Maybe print a message
+   that this a retry is happening."
+  [f fe]
+  (let [tryfn
+        (fn [] (try (let [result (f)]
+                      (assert (not (fn? result)))
+                      result)
+                    (catch Exception e (if (fe e) f nil))))]
+    (trampoline tryfn)))
+
 (defn find-if
   "Returns the first element in coll for which predicate returns true,
    unlike 'some' that returns the true if there is any object in coll for which pred returns true."

@@ -1,6 +1,6 @@
 (ns ^{:doc "Java native SSH client tools"}
   jdt.ssh
-  (:require [jdt.core :refer [remove-key-value-pair get-key-value]])
+  (:require [jdt.core :refer [remove-key-value-pair get-key-value printlines]])
   (:require [jdt.easyfs :refer [as-path abs-path parent file-name-string probe-file size]])
   (:require [clojure.java.io :refer [copy input-stream output-stream]])
   (:require [clojure.string :as string])
@@ -9,8 +9,8 @@
 ;;; This is what things look ilke if you don't use a native client instead shell out
 ;;; to the command line.  Yuck.  The problem is getting tty's.
 #_
-(defn- ssh-command
-  "Perform an ssh command to a scribe host indicated by public dns name.
+(defn- native-ssh-command
+  "Perform a native ssh command to a scribe host indicated by public dns name.
    E.g. (ssh-command \"ec2-23-23-83-179.compute-1.amazonaws.com\"
                      \"mykey\" \"ec2-user\" \"ls\")
    Return output if any or throw an exception if things don't work."
@@ -102,6 +102,24 @@
       (throw (Exception. (str rc " return from ssh command with " args
                               ", stderr= " \newline stderr))))
     stdout))
+
+(defn print-ssh-output
+  "Take the output of the ssh function and try to print it nicely 
+  (as opposed to a big string with \\n escapes).
+  Return the ssh return code."
+  [ssh-result-vector]
+  ;; Ssh output is [return-code stdout stderr]
+  (let [[return-code stdout stderr] ssh-result-vector]
+    (if (and stderr (> (count stderr) 0))
+      (printlines (clojure.string/split-lines stderr)))
+    (printlines (clojure.string/split-lines stdout))
+    return-code))
+
+(defn ssh-output-lines
+  "Take the output of the ssh function and return a list of lines of standard output."
+  [ssh-result-vector]
+  (clojure.string/split-lines (nth ssh-result-vector 1)))
+
 
 (defn ssh-test
   "Invoke a simple ssh command that does nothing too useful except verify
