@@ -52,11 +52,14 @@
    :target-host string specifying the remote host IP or DNS address. Required.
    :proxy-host  string specifying the proxy host IP or DNS address, if a proxy is to be used. Optional.
    :proxy-port  integer specifying the proxy host port number. Required if proxy-host specified.
+   :connect-timeout non-negative integer specifying the connection timeout in milliseconds, zero means
+                no timeouts. Won't help you with proxy->target timeouts.  Defaults to zero.
    :tty         true if you want a pseudo-tty associated with the connection.  Optional.
                 Note that you may see carriage returns appended to the EOL sequence for returned output
                 if you select this option, i.e. CRLF instead of LF for remote linux commands.
    :verbose     if true, print out ssh parameters."
-  [command & {:keys [private-key target-user target-host proxy-host proxy-port tty verbose]}]
+  [command & {:keys [private-key target-user target-host proxy-host proxy-port connect-timeout tty verbose]
+              :or {connect-timeout (int 0)}}]
   {:pre [private-key target-user target-host (if proxy-port (number? proxy-port) true)]}
   (if verbose
     (println "ssh" command "\n" :private-key private-key :target-user target-user 
@@ -67,7 +70,7 @@
     (with-open [connection (Connection. target-host)]
       (if proxy-host
         (.setProxyData connection (HTTPProxyData. proxy-host proxy-port)))
-      (.connect connection)
+      (.connect connection nil connect-timeout 0)
       (if private-key
         (if-not (.authenticateWithPublicKey connection
                                             target-user (java.io.File. private-key) nil)
@@ -182,8 +185,11 @@
   :target-host string specifying the remote host IP or DNS address. Required.
   :proxy-host  string specifying the proxy host IP or DNS address, if a proxy is to be used. Optional.
   :proxy-port  integer specifying the proxy host port number. Required if proxy-host specified.
+  :connect-timeout non-negative integer specifying the connection timeout in milliseconds, zero means
+               no timeouts. Won't help you with proxy->target timeouts.  Defaults to zero.
   :verbose     if true, print out other parameters before trying to connect."
-  [f & {:keys [args private-key target-user target-host proxy-host proxy-port verbose]}]
+  [f & {:keys [args private-key target-user target-host proxy-host proxy-port connect-timeout verbose]
+        :or {connect-timeout (int 0)}}]
   {:pre [target-user target-host (if proxy-port (number? proxy-port) true)]}
   (if verbose
     (println "scp" :private-key private-key :target-user target-user 
@@ -191,7 +197,7 @@
   (with-open [connection (Connection. target-host)]
     (if proxy-host
       (.setProxyData connection (HTTPProxyData. proxy-host proxy-port)))
-    (.connect connection)
+    (.connect connection nil connect-timeout 0)
     (if private-key
       (if-not (.authenticateWithPublicKey connection
                                           target-user (java.io.File. private-key) nil)
@@ -214,6 +220,8 @@
   :target-host string specifying the remote host IP or DNS address. Required.
   :proxy-host  string specifying the proxy host IP or DNS address, if a proxy is to be used. Optional.
   :proxy-port  integer specifying the proxy host port number. Required if proxy-host specified.
+  :connect-timeout non-negative integer specifying the connection timeout in milliseconds, zero means
+               no timeouts. Won't help you with proxy->target timeouts.  Defaults to zero.
   :verbose     if true, print out other parameters before trying to connect."
   [source-path dest-path & args]
   (let [local-path (abs-path (as-path source-path))
@@ -250,6 +258,8 @@
   :target-host string specifying the remote host IP or DNS address. Required.
   :proxy-host  string specifying the proxy host IP or DNS address, if a proxy is to be used. Optional.
   :proxy-port  integer specifying the proxy host port number. Required if proxy-host specified.
+  :connect-timeout non-negative integer specifying the connection timeout in milliseconds, zero means
+               no timeouts. Won't help you with proxy->target timeouts.  Defaults to zero.
   :verbose     if true, print out other parameters before trying to connect."
   [source-path dest-path & args]
   ;; Try to open local path before we establish the connection, to fail-fast if necessary
