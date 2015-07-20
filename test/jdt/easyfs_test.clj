@@ -59,9 +59,11 @@
     (assert (writable? "~/.bashrc"))))
 ;; *TODO*: test case where file isn't writable, need a chmod or something for that
 
+(def homedir (System/getProperty "user.home")) ; /home/dtenny, etc
+
 (deftest test-same-file
   (testing "same-file?"
-    (assert (same-file? "~/.bashrc" "/home/./dave/.bashrc"))
+    (assert (same-file? "~/.bashrc" (str homedir "/.bashrc")))
     (assert (not (same-file? "~/.bashrc" "~/clojure")))))
             
 (deftest test-to-path

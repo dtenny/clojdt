@@ -228,6 +228,18 @@
       (some (fn [x] (let [y (keyfn x)] (if (testfn item y) x))) sequence)
       (some (fn [x] (if (testfn item x) x)) sequence))))
 
+(defn index-of 
+  "Return the index of the first element for which pred return true in sequence.
+  Return nil if there is no element in the index for which pred returns true.
+  This is basically Common Lisp's POSITION-IF in simplified form."
+  [pred s]
+  (loop [n 0 s s]
+    (if (empty? s)
+      nil
+      (if (pred (first s))
+        n
+        (recur (+ n 1) (rest s))))))
+
 (def cl-eq
   "A version of the comon lisp eq predicate."
   identical?)

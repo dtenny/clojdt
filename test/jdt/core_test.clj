@@ -27,6 +27,10 @@
     (is (= (cl-find 0 '(1 -1 2 3 0) :start 1 :from-end true :test >) -1))
     ))
 
+(deftest test-index-of
+  (is (= (index-of pos? [-1 -2 -3]) nil))
+  (is (= (index-of pos? [-1 -2 4]) 2)))
+
 (deftest test-cl-eql
   (is (cl-eql 'a 'a))
   (is (cl-eql :b :b))
