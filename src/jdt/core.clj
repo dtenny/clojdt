@@ -527,14 +527,16 @@
 
 (defn printlines
   "Given a sequence, attempt to print one line for each element of the sequence, as if by
-   (doseq [x seq] (println x)).  Any non-sequence arguments are printed as if by (println x)."
+  (doseq [x seq] (println x)).  Any non-sequence arguments are printed as if by (println x).
+  Returns nil."
   [& args]
   (doseq [x args]
-    (if (coll? x)
+    (if (and (not (string? x)) (seqable? x))
       (doseq [x x] (println x))
       (println x))))
-;;(printlines '(a b c))
-;;(printlines 1 '(2 3 4) [5 6 7])
+;;(printlines '(a b c)) => a b c (at one line each)
+;;(printlines 1 '(2 3 4) [5 6 7]) => 1 2 3 4 5 6 7 (at one line each)
+;;(printlines "abc") => "abc" (as one string)
 
 (defn pr-to
   "Bind *out* to writer, invoke 'pr' on objects.  Return nil."
@@ -756,6 +758,15 @@
          (let [~sym file#]
            ~@body)
          (finally (.delete file#))))))
+
+(defn resource-as-file
+  "Given the name or relative string path of file in the leiningen project's 'resources' directory
+  return a File object that describes the file object.
+  E.g. (resouce-as-file \"foo.sh\") => #<File \"/home/dtenny/clojure/ha/resources/foo.sh\"
+  Returns nil if the specified resource file does not exist."
+  [resource-relative-path]
+  (clojure.java.io/as-file
+   (clojure.java.io/resource resource-relative-path)))
 
 (defn date->utc
   "Get a Z suffixed UTC date/time string in sortable, filename-friendly form of
