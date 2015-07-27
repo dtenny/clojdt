@@ -129,6 +129,21 @@
      nil
      (apply f args))))
 
+(defn third
+  "(nth s 2) - because I like it"
+  [s]
+  (nth s 2))
+
+(defn fourth
+  "(nth s 3) - because I like it"
+  [s]
+  (nth s 3))
+
+(defn fifth
+  "(nth s 4) - because I like it"
+  [s]
+  (nth s 4))
+
 (defmacro unless [condition & body]
     `(when (not ~condition)
        ~@body))
