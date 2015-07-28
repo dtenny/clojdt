@@ -148,3 +148,8 @@
       (is (= (slurp file2) "ye"))
       (.delete file)
       (.delete file2))))
+
+(deftest test-parse-path
+  (is (= (parse-path "abc def") ["abc" " def"]))
+  (is (= (parse-path "\"ab \\\"cde\" def") ["ab \"cde" " def"])))
+

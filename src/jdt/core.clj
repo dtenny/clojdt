@@ -601,6 +601,40 @@
     true
     false))
 
+(defn parse-path 
+  "Given a String which starts with file path optionally followed by other stuff
+  return a vector of two strings 
+  (1) string with the first file path listed
+  (2) a substring with the remainder of the string following the matched file path
+  
+  Returns logical false if there no match.
+
+  A path is basically an unquoted sequence of non-whitespace characters, 
+  or a quoted sequence of characters.  In the case of quoted paths, strips out the quotes or unquotes
+  quoted elements.
+
+  Only parses double quoted paths for now, not single quoted paths."
+  [s]
+  (or (and (not (.startsWith s "\""))
+           (let [m1 (re-matcher #"[^\"\p{Space}]+" s)]
+             (and (.find m1 0)
+                  [(.group m1 0) (.substring s (.end m1))])))
+      (loop [chars (rest s) result [] escape nil]
+        (if (empty? chars)
+          false                         ;never found terminating quote
+          (let [char (first chars)]
+            (cond escape
+                  (recur (rest chars) (conj result char) false) ;add escaped char
+                  (= char \\)
+                  (recur (rest chars) result true) ;skip escape char
+                  (= char \")
+                  [(String. (into-array Character/TYPE result))
+                   (String. (into-array Character/TYPE (rest chars)))] ;found string termination, done
+                  :else
+                  (recur (rest chars) (conj result char) false)))))))
+;; (parse-path "abc def") => ["abc" " def"]
+;; (parse-path "\"ab \\\"cde\" def") => ["ab \"cde" " def"]
+
 (defn readlines
   "Given some I/O source compatible with clojure.java.io/reader (which will be closed),
   return a vector of lines readable from the source.
