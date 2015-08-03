@@ -56,6 +56,18 @@
       (is (= (assoc-if {} nil :a 'a) {:a 'a}))
       (is (= (apply assoc-if {:g "g"} (fn [k v] (not (nil? v))) l)) {:d false, :b 'b, :a 'a, :g "g"}))))
   
+(deftest test-cl-count-if
+  (is (= (cl-count-if odd? (range 0 6)) 3))
+  (is (= (cl-count-if pos? (range 1 5) :key #(- % 3))  1))
+  (is (= (cl-count-if #(> % 2) (range 0 5) :start 3) 2))
+  (is (= (cl-count-if #(= (rem % 3) 0) (range 1 7) :end 2) 0))
+  (is (= (cl-count-if #(= (rem % 3) 0) (range 1 7) :end 3) 1))
+  (is (= (cl-count-if #(= (rem % 3) 0) (range 1 7) :end 4) 1))
+  (is (= (cl-count-if #(= (rem % 3) 0) (range 1 7) :end 5) 1))
+  (is (= (cl-count-if #(= (rem % 3) 0) (range 1 7) :end 6) 2))
+  (is (= (cl-count-if #(= (rem % 3) 0) (range 1 7) :end 7) 2)) ; one past end
+  (is (= (cl-count-if #(= (rem % 3) 0) (range 1 7) :end 7) 2))) ; two past end
+
 (deftest test-and-let
   (is (nil? (and-let [x nil y 1] [x y])))
   (is (nil? (and-let [x 1 y nil] [x y])))

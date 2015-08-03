@@ -3,9 +3,11 @@
   (:import java.io.BufferedReader)
   (:import java.util.Date)
   (:import java.text.SimpleDateFormat)
-  (:require [clojure.walk :as walk])
   (:require [clojure.java.io :as io])
   (:require [clojure.pprint :refer [cl-format]]))
+
+;; WISHLIST
+;; map-invert  capabilities (smarter than those in clojure.set) for 1:1 and 1:N reversals with resonable behaviors.
 
 #_
 (defn defined?
@@ -243,6 +245,36 @@
       (some (fn [x] (let [y (keyfn x)] (if (testfn item y) x))) sequence)
       (some (fn [x] (if (testfn item x) x)) sequence))))
 
+(defn cl-count-if 
+  "A version of the Common Lisp 'count-if' function.  Differs in that the 'test-not' and 'from-end'
+  arguments are not supported.
+
+  Deemed less likely to set my hair on fire than routinely using
+  (filter identity (map (fn [x] ...) s)).
+
+  Count and return the number of elements in the 'sequence' bounded by 'start' and 'end'
+  that satisfy the 'predicate'.
+
+  sequence   - a proper sequence.
+  predicate  - a designator for a function of one argument that returns a logical boolean.
+  start, end - bounding index designators of sequence. The defaults for start and end are 0 and nil 
+               (implying length), respectively.
+  key        - a designator for a function of one argument, or nil."
+  [predicate sequence & {:keys [start end key]}]
+  (loop [result 0 
+         s (or (and start (drop start sequence)) sequence)
+         n 0]
+    (if (or (empty? s)
+            (and end (= n end)))
+      result
+      (let [item (first s)
+            item-val (if key (key item) item)]
+        (recur (if (predicate item-val)
+                 (+ result 1)
+                 result)
+               (rest s)
+               (+ n 1))))))
+
 (defn index-of 
   "Return the index of the first element for which pred return true in sequence.
   Return nil if there is no element in the index for which pred returns true.
@@ -376,9 +408,6 @@
         (coll? x) (apply list x)
         (nil? x) ()
         :else (list x)))
-
-;; (use 'clojure.walk) -> provides macroexpand-all, useful sometimes where macroexpand isn't enough
-;; recursive macros like and-let being one of those cases
 
 (defn cl-print
   "A Common Lisp style PRINT function.
