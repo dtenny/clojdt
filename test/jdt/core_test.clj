@@ -165,3 +165,12 @@
   (is (= (parse-path "abc def") ["abc" " def"]))
   (is (= (parse-path "\"ab \\\"cde\" def") ["ab \"cde" " def"])))
 
+(deftest test-mapply
+  (let [foo (fn [a b & {:keys [c d]}]
+              [a b c d])
+        bar (fn [a b & {:keys [c d] :as options}]
+              (mapply foo a b options))]
+    (is (= (bar 1 2) [1 2 nil nil]))
+    (is (= (bar 1 2 :c 3) [1 2 3 nil]))
+    (is (= (bar 1 2 :d 4) [1 2 nil 4]))
+    (is (= (bar 1 2 :c 3 :d 4) [1 2 3 4]))))

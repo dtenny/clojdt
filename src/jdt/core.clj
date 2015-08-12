@@ -950,3 +950,18 @@
       (fnext tail)
       missing-value)))
 
+(defn mapply
+  "Applies a function f to the argument list formed by concatenating
+  everything but the last element of args with the last element of
+  args.  This is useful for applying a function that accepts keyword
+  arguments to a map.  E.g.
+
+  (defn foo [a b & {:keys [c d]}]
+    (println 'foo a b c d))
+  (defn bar [a b & {:keys [c d] :as options}]
+    (mapply foo a b options))
+
+  Because you can NOT do 
+  (apply foo a b options) in bar."
+  [f & args]
+  (apply f (apply concat (butlast args) (last args))))
