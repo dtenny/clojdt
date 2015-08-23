@@ -8,15 +8,10 @@
 
 ;; WISHLIST
 ;; map-invert  capabilities (smarter than those in clojure.set) for 1:1 and 1:N reversals with resonable behaviors.
+  ;; (defn x [{:keys [a b] :as passed-keys}]
+  ;;   {pre [(validate-fn-keys x passed-keys)]} ...)
 
-#_
-(defn defined?
-  "True if symbol is defined in namespace, untrue otherwise.  See also: bound?"
-  ([name] (get (ns-map *ns*) name))
-  ([name ns] (get (ns-map ns) name)))
 
-;; Here's a little exercise where we define dispatch based on whether the args are strings or symbols
-;; and convert from strings to symbols.
 (defmulti defined? 
   "True if symbol is defined in namespace, untrue otherwise"
   (fn [ & args ] (mapv class args)))
@@ -25,12 +20,18 @@
 (defmethod defined? [java.lang.String] [name] (defined? (symbol name)))
 (defmethod defined? [java.lang.String clojure.lang.Namespace] [name ns] (defined? (symbol name) ns))
 
-(defn undef
+(defmulti undef
   "Opposite of def, remove name (a string or symbol) from namepsace map (defaults to *ns*).
    Return true if the symbol was undefined, false if it was not."
-  ;; ns-unmap always returns false, correct for it.
-  ([name] (and (defined? name *ns*) (do (ns-unmap *ns* name) (not (defined? name *ns*)))))
-  ([name ns] (and (defined? name ns) (do (ns-unmap ns name) (not (defined? name *ns*))))))
+  ;; Note, ns-unmap does not accept strings, requires symbol.
+  (fn [ & args ] (mapv class args)))
+(defmethod undef [clojure.lang.Symbol] [name] 
+  (and (defined? name *ns*) (do (ns-unmap *ns* name) (not (defined? name *ns*)))))
+(defmethod undef [clojure.lang.Symbol clojure.lang.Namespace] [name ns]
+  (and (defined? name ns) (do (ns-unmap ns name) (not (defined? name ns)))))
+(defmethod undef [java.lang.String] [name] (undef (symbol name)))
+(defmethod undef [java.lang.String clojure.lang.Namespace] [name ns] (undef (symbol name) ns))
+
 
 (defn ns-vars
   "Return sequence of vars interned in ns.
@@ -64,6 +65,51 @@
   ;; Careful using reader macros like ^ in macros, and meta is particularly tricky.
   ;; See http://stackoverflow.com/questions/989374/help-me-write-a-clojure-macro-which-automatically-adds-metadata-to-a-function-de
   `(def ~(with-meta var (assoc (meta var) :dynamic true)) ~@rest))
+
+(defn fn-name-info
+  "Given a function, try to deduce the function name and clojure namespace by looking 
+  at the function's java class name and decoding stuff.  Return a vector of name, namespace strings, 
+  or nil if we can't find anything.
+  
+  For example, if in jdt.core we do (defn foo []), the resulting value foo is a thing whose class is
+  jdt.core$foo, for which we can return [\"jdt.core\" \"foo\"].
+  
+  However, for anonymous functions like (fn []) typed into the REPL, 
+  you're going to get something like [\"jdt.core\" \"eval3676$fn__3677\"]
+
+  Fortunately we can call clojure.lang.Compiler/demunge to do this
+  (clojure.lang.Compiler/demunge (.getName (class logically-false?))) => \"jdt.core/logically-false?\""
+  [f]
+  (clojure.string/split (clojure.lang.Compiler/demunge (.getName (class f))) #"/" 
+                        2))             ;number of split tokens, not number of times we split on '/'
+
+(defmulti arglist 
+  "Given something we can coerce to a Var, return arglist metadata for the Var if it exists, nil otherwise.
+  Arglist data is list of vectors of symbols, one vector for each arity function/macro/method
+  associated with the Var."
+  (fn [ & args ] (mapv class args)))
+(defmethod arglist [clojure.lang.Var] [var] (:arglists (meta var)))
+(defmethod arglist [clojure.lang.Symbol] [sym] (arglist (ns-resolve *ns* sym)))
+(defmethod arglist [clojure.lang.Symbol clojure.lang.Namespace] [sym ns] (arglist (ns-resolve ns sym)))
+(defmethod arglist [java.lang.String] [str] (arglist (symbol str)))
+(defmethod arglist [java.lang.String clojure.lang.Namespace] [str ns] (arglist (symbol str) ns))
+(defmethod arglist [clojure.lang.MultiFn] [f] 
+  ;; there is no meta :arglists information on multis!
+  ;; If we call (.getMethodTable on multifn) we can see the IfN's for the multimethod, and maybe could
+  ;; work out at least arity, but it isn't worth while.
+  (comment
+    ;; Defmulti objects will be of type MultiFn. They do have a non-public name field that might help
+    ;; i.e. the one for this method is 'arglist'.  However we have to go through hoops to get it.
+    ;; Meanwhile, let's try. 
+    (let [field (.getDeclaredField (class f) "name")]
+      (.setAccessible field true)         ;else we'll get access violation on 'final' field.
+      (if-let [name (.get field f)]
+        (arglist name)))))
+(defmethod arglist [clojure.lang.IFn] [f] 
+  (let [[ns-name fn-name] (fn-name-info f)
+        ns (find-ns (symbol ns-name))]
+    (if ns
+      (arglist fn-name ns))))
 
 (defn logically-false?
   "Return true if the supplied argument is logically false, otherwise nil."
@@ -220,6 +266,23 @@
 ;; clojure.core/some could do it, though I'm often too lazy to want to wrap the object to be found
 ;; in the right predicate.
 ;; clojure.core/filter can do it, but might return more items than I want, I only want one.
+;; clojure.core/contains? might do it, but looking for values in vectors or lists won't work as expected.
+
+(defn contains-value?
+  "Like clojure.core/contains?, only we do value tests for numerically indexed collections instead of
+  the stupid numeric-key-is-within-array-bounds check.  You could use 'some', though in some loops
+  you'd be consing up function objects fairly needlessly (with a 'some' predicate for every
+  value you're looking for."
+  [coll key]
+  (cond (or (set? coll) (map? coll))
+        (contains? coll key)
+        :else
+        (loop [vals (seq coll)]
+          (if (empty? vals)
+            false
+            (if (= (first vals) key)
+              true
+              (recur (rest vals)))))))
 
 (defn cl-find
   "A version of the common lisp 'find' function.
@@ -448,6 +511,7 @@
     (filter (fn [ns] (re-matches pattern (name (ns-name ns))))  (all-ns))))
 ;; (ns-apropos "jdt") will find this package
 
+;; There are more elegant ways to express this, I wrote it before I knew how...
 (defn ns-symbol-relationship
   "Return a map of entries that describe the relationship of a symbol to a given namespace."
   [ns symbol]
@@ -482,67 +546,6 @@
     (persistent! (var-get result))))
 ;;(println (ns-symbol-relationship *ns* 'ns-symbol-relationship))
 ;; => {:interns #'jdtutil.core/ns-symbol-relationship, :maps-to #'jdtutil.core/ns-symbol-relationship, :interns-publicly #'jdtutil.core/ns-symbol-relationship}    
-
-;;; Some alternatives to the above implementation
-#_
-(defn ns-symbol-relationship-2
-  [ns symbol]
-  {:pre [(symbol? symbol)]}
-  (as-> {} result
-        (assoc result :name-ns (when (= (ns-name ns) symbol) ns))
-        (assoc result :imports (get (ns-imports ns) symbol))
-        (assoc result :interns (get (ns-interns ns) symbol))
-        (assoc result :maps-to (get (ns-map ns) symbol))
-        (assoc result :interns-publicly (get (ns-publics ns) symbol))
-        (assoc result :refers-to (get (ns-refers ns) symbol))
-        (apply (partial merge-with conj result)
-               (map (fn [[k v]]
-                      {:aliased-for (when (= k symbol) [v])
-                       :aliased-by  (when (= (ns-name v) symbol) [k])})
-                    (seq (ns-aliases ns))))))
-#_
-(defn ns-symbol-relationship-3
-  [ns symbol]
-  {:pre [(symbol? symbol)]}
-  (-> {}
-      (assoc :name-ns (when (= (ns-name ns) symbol) ns))
-      (assoc :imports (get (ns-imports ns) symbol))
-      (assoc :interns (get (ns-interns ns) symbol))
-      (assoc :maps-to (get (ns-map ns) symbol))
-      (assoc :interns-publicly (get (ns-publics ns) symbol))
-      (assoc :refers-to (get (ns-refers ns) symbol))
-      (->> 
-       (partial merge-with conj))
-      (apply 
-       (map (fn [[k v]]
-              {:aliased-for (when (= k symbol) [v])
-               :aliased-by  (when (= (ns-name v) symbol) [k])}) (seq (ns-aliases ns))))))
-#_
-(defn ns-symbol-relationship-4
-  [ns symbol]
-  {:pre [(symbol? symbol)]}
-  {:name-ns (when (= (ns-name ns) symbol) ns)
-   :imports (get (ns-imports ns) symbol)
-   :interns (get (ns-interns ns) symbol)
-   :maps-to (get (ns-map ns) symbol)
-   :interns-publicly (get (ns-publics ns) symbol)
-   :refers-to (get (ns-refers ns) symbol)
-   :aliased-for (map (fn [[k v]] (when (= k symbol) [v])) (seq (ns-aliases ns)))
-   :aliased-by (map (fn [[k v]] (when (= (ns-name v) symbol) [k])) (seq (ns-aliases ns)))})
-#_
-(do
-  (println "r1: " (str (ns-symbol-relationship   *ns* 'ns-symbol-relationship)))
-  (println "r2: " (str (ns-symbol-relationship-2 *ns* 'ns-symbol-relationship)))
-  (println "r3: " (str (ns-symbol-relationship-3 *ns* 'ns-symbol-relationship)))
-  (println "r4: " (str (ns-symbol-relationship-4 *ns* 'ns-symbol-relationship))))
-;; Comments:
-;; pastebin link: good
-;; :pre/post: good
-;; as-> good
-;; direct map construction: good
-;; pr-str, redundant with str?  Or not because of the *print-xxx* options?
-;; key/nil pairs not desired.
-;; #4 if easiest to read, but adds the most nil values
 
 (defn map-get
   "Perform GET of a key across multiple maps, returning a lazy sequence of the results of the get.
@@ -965,3 +968,99 @@
   (apply foo a b options) in bar."
   [f & args]
   (apply f (apply concat (butlast args) (last args))))
+
+
+(defn map-keys-valid?
+  "Given a map m, verify that all keys in 'm' are in the collection 'valid-keys',
+  Return logical true if all keys in the map are valid, logical false if they are not.
+  If there are many keys, the caller should probably specify the valid keys
+  as a set.  See also: validate-map-keys.
+
+  While you could implement this as something like
+  (empty? (clojure.set/difference (into #{} (keys m)) (into #{} valid-keys)))
+  the present implementation is expected to be more efficient for most use cases.
+  It's also more readable when called in my book: -jdt."
+  [m valid-keys]
+  (loop [ks (keys m)]
+    (if (empty? ks)
+      true
+      (let [k (first ks)]
+        (if (contains-value? valid-keys k)
+          (recur (rest ks))
+          false)))))
+
+(def ^{:dynamic true :private true
+       :doc "Function to construct exception, because I wanted to reuse a function I didn't 
+            normally want to throw IllegalArgumentException."}
+  *validate-maps-exception* 
+  (fn [str] (Exception. str)))
+
+(defn validate-map-keys 
+  "Given a map m, verify that all keys in 'm' are in the collection 'valid-keys',
+  Throw an exception if this is not the case.  Useful to ensure that 
+  a map contains only the keys you expect and not something you'll ignore, 
+  such as for keyword maps on function calls.
+
+  Return nil if there are no failures.
+  If there are many keys, the caller should probably specify the valid keys
+  as a set."
+  [m valid-keys]
+  (doseq [k (keys m)]
+    (if-not (contains-value? valid-keys k)
+      (throw (*validate-maps-exception* (str "Key '" k "' in map is not a valid key."))))))
+
+(defn validate-fn-keywords
+  "Given a function Var, or other objects that can be fed to 'arglist' to get argument list information
+  about a function, and some map representing keywords passed to the function, 
+  do one of the following:
+  1) If we can't obtain arglist information or you don't have any keywords specified in the funciton 
+     definition throw an IllegalStateException. Sorry, you're out of luck and can't use 
+     validate-fn-keywords.
+  2) If we obtain arglist information with keywords, validate keywords in the passed map
+     to ensure they're known to the function declaration, and throw IllegalArgumentException
+     if they were not expected (declared).
+  If keywords passed muster, return nil.
+
+  Example: (defn foo [& {:keys [a b] :as options}]
+              {:pre ... stuff }
+              (validate-fn-keywords foo options)
+              ... rest of functiobn ...)
+
+  Note that in the above case we're going to reverse engineer the function object bound to foo
+  to find the argument metadata.  You could also specify #'foo for a more sure-fire bet.
+  If you have the valid keywords in some other plase, use 'validate-map-keys' instead, 
+  this function is for parsing arglist metadata about functions and applying that information
+  to the map validatiobn.
+
+  Caveat: if you have multiple maps in your function declaration, we only observe keywords form the 
+  last map."
+  [arglist-input map-to-validate]
+  (let [arg-lists (arglist arglist-input)]
+    (if-not arg-lists
+      (throw (IllegalStateException. (str "Arglist info was not found for " arglist-input))))
+    ;; (defn foo [a b & {:keys [c d]}])         =>  ([a b & {:keys [c d]}])
+    ;; (defn bar [a b {:keys [c d]}])           =>  ([a b {:keys [c d]}])
+    ;; (defn baz [{:keys [a]} {:keys [b]}])     =>  ([{:keys [a]} {:keys [b]}])
+    ;; (defn ack [a b & {c :c d :d}] [a b c d]) =>  ([a b & {c :c, d :d}])
+    ;; Note that you can't declare multi-arity functions multiple variadic forms and some other restrictions.
+    ;; Not going to worry about it now.
+
+    ;; Now ... gather up the keywords from all arg lists, which probably isn't the right thing to do
+    ;; but will serve as a start.  Scan the vectors returned by arglist to find maps and pick put the :keys
+    ;; elements.  We'll only take the last map in each arglist.
+    (let [destructuring-maps
+          (filter identity
+                  (map (fn [arglist] 
+                         (let [hopeful-map (last arglist)]
+                           (and (map? hopeful-map)
+                                hopeful-map)))
+                       arg-lists))
+          ;; destructuring map will look like {:keys [a b]} or {c :c}, etc
+          allkeys (apply concat
+                         (map (fn [destructuring-map]
+                                (or (empty->nil (map keyword (:keys destructuring-map)))
+                                    (vals destructuring-map)))
+                              destructuring-maps))]
+      ;; Okay, all-keys is now a list of keywords, do the map validation
+      (binding [*validate-maps-exception* (fn [str] (IllegalArgumentException. str))]
+        (validate-map-keys map-to-validate allkeys)))))

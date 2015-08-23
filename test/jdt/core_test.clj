@@ -174,3 +174,53 @@
     (is (= (bar 1 2 :c 3) [1 2 3 nil]))
     (is (= (bar 1 2 :d 4) [1 2 nil 4]))
     (is (= (bar 1 2 :c 3 :d 4) [1 2 3 4]))))
+
+(deftest test-fn-name-info
+  (is (= ["jdt.core" "fn-name-info"] (fn-name-info fn-name-info))))
+
+(deftest test-arglist
+  (is (= ['(f)] (arglist fn-name-info))))
+
+(deftest test-contains-value?
+  (is (contains-value? [:a :b :c] :c))
+  (is (not (contains-value? [:a :b :c] :d))))
+
+(deftest test-map-keys-valid?
+  (is (map-keys-valid? {} []))
+  (is (map-keys-valid? {:a 1} [:a]))
+  (is (not (map-keys-valid? {:a 1 :b 2} [:a]))))
+
+(deftest test-validate-map-keys
+  ;; There isn't an (is-not) or (is (not (thrown?))).  So we're just checking fn returns.
+  (is (not (validate-map-keys {} [])))
+  (is (not (validate-map-keys {:a 1} [:a])))
+  (is (thrown? Exception (validate-map-keys {:a 1 :b 2} [:a]))))
+
+;; Function sfor validate-fn-keywords
+(defn f1 [a b & {:keys [c d]}] [a b c d])
+(defn f2 [a b {:keys [c d]}] [a b c d])
+(defn f3 [{:keys [a]} {:keys [b]}] [a b ])
+(defn f4 [a b & {c :c d :d}] [a b c d])
+(defn f5 [a b & {:keys [c d] :as options}]
+  (validate-fn-keywords f5 options)
+  [a b c d])
+
+(deftest test-validate-fn-keywords
+  ;; Won't throw unless passed map has keywords not declared
+  (is (not (validate-fn-keywords f1 {:c 1})))
+  (is (not (validate-fn-keywords f1 {:d 2})))
+  (is (not (validate-fn-keywords f1 {:c 1 :d 2})))
+  (is (thrown? Exception (validate-fn-keywords f1 {:c 1 :d 2 :e 3})))
+  (is (not (validate-fn-keywords f2 {:c 1})))
+  (is (thrown? Exception (validate-fn-keywords f2 {:e 3})))
+  (is (not (validate-fn-keywords f3 {:b 1})))
+  (is (thrown? Exception (validate-fn-keywords f3 {:f 3})))
+  (is (not (validate-fn-keywords f4 {:c 1 :d 2})))
+  (is (thrown? Exception (validate-fn-keywords f4 {:d 2 :e 3})))
+  (is (= (f5 1 2 :c 3) [1 2 3 nil]))
+  (is (thrown? Exception (f5 1 2 :f 5)))
+  (is (= (f5 1 2 :d 4) [1 2 nil 4]))
+  (is (thrown? Exception (f5 1 2 :c 3 :d 4 :e 5))))
+
+
+  

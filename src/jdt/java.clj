@@ -35,12 +35,42 @@ return a seq of all accessible java packages that match the string-or-regexp"
   [string-or-regexp]
     (filter (apropos-match-fn string-or-regexp) (map #(.getName %1) (Package/getPackages))))
 
+(defn class-direct-methods 
+  "Return a seq of Method members directly associated with a class 'c' (not including inherited behaviors."
+  [c]
+  (seq (.getDeclaredMethods c)))
+
+(defn class-all-methods
+  "Return a seq of Method members associated with a class 'c' whether directly or via its superclasses."
+  [c]
+  (loop [classes (conj (supers c) c) result []]
+    (if (empty? classes)
+      result
+      (recur (rest classes) (concat result (seq (.getDeclaredMethods (first classes))))))))
+
 (defn class-member-list
   "List public 'member' methods and fields of a Java class.
 Not sure about inherited stuff and static methods."
   [class]
   ;; *TBD* Consider .getDeclaredMethods so we don't see supertype methods
   (concat (.getFields class) (.getMethods class)))
+
+;; this function is not done yet, need to observe doInvoke vs. invoke and maybe return range
+;; of min/max args (which don't map to parameters unless you inspect metadata arglist)
+#_
+(defn clojure-fn-arity
+ "Returns the maximum parameter count of a function by examining each invoke method found by reflection
+  on function. The returned value can be then interpreted as the arity
+  of the input function. The count does NOT detect variadic functions, and any optional arguments
+  will all be lumped into one function argument."
+  [f]
+  ;; Variadic functions will inherit/implement clojure.lang.RestFN which will define
+  ;; (.getRequiredArity f) on the function to return the minimum required number of arguments.
+  ;; These functions also use a 'doInvoke' api instead of a 'invoke' api.
+  ;; Fixed argument functions will 'invoke' and no 'getRequiredArity'.
+  (let [direct-methods-named-invoke
+        (filter #(= "invoke" (.getName %)) (.getDeclaredMethods (class f)))]
+    (reduce max 0 (map #(alength (.getParameterTypes %1)) direct-methods-named-invoke))))
 
 (defn class-apropos "Perform apropos on a class and return class members that match str-or-pattern"
   [class str-or-pattern]
