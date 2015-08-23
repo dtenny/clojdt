@@ -8,9 +8,6 @@
 
 ;; WISHLIST
 ;; map-invert  capabilities (smarter than those in clojure.set) for 1:1 and 1:N reversals with resonable behaviors.
-  ;; (defn x [{:keys [a b] :as passed-keys}]
-  ;;   {pre [(validate-fn-keys x passed-keys)]} ...)
-
 
 (defmulti defined? 
   "True if symbol is defined in namespace, untrue otherwise"
