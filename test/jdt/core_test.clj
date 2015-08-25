@@ -222,5 +222,25 @@
   (is (= (f5 1 2 :d 4) [1 2 nil 4]))
   (is (thrown? Exception (f5 1 2 :c 3 :d 4 :e 5))))
 
-
-  
+(deftest test-exception-retry 
+  (let [throw-counter (atom nil)
+        call-counter (atom nil)
+        throwing-fn (fn [] 
+                      (swap! call-counter inc)
+                      ;;(println "throwing-fn" @throw-counter)
+                      (while (pos? @throw-counter)
+                        (swap! throw-counter dec)
+                        (throw (Exception. (str @throw-counter))))
+                      @throw-counter)
+        handling-fn (fn [e] 
+                      ;;(println "handling-fn" (.getMessage e))
+                      true)
+        tester (fn [n] 
+                 ;;(println "tester" n)
+                 (reset! throw-counter n) 
+                 (reset! call-counter 0)
+                 (exception-retry throwing-fn handling-fn)
+                 (is (= @call-counter (+ n 1)))
+                 (is (= @throw-counter 0)))]
+    (dotimes [i 4]
+      (tester (+ i 1)))))

@@ -226,7 +226,11 @@
    If f completes execution without throwing we return the return value of f.
    If f throws and fe returns logical false, return nil.
 
-   f must not return a function, this is prohibited and will result in an exception.
+   'f' is a function of no args and must not return a function. 
+   This is prohibited and will result in an exception.
+
+   'fe' must take one argument, the exception that was thrown by f.
+   It should return logical true if 'f' should be retried, logical false if not.
 
    This function is a non-recursive workaround for situations for where
    you want to recurse in a catch/finally statement (i.e. retry a try block in the face of
@@ -234,17 +238,18 @@
    This works around it.
 
    E.g. (loop [] (try (f) (catch Exception e (recur)))) ; WILL NOT WORK
-   but  (exception-retry f (fn [] true)) ; WILL WORK
+   but  (exception-retry f (fn [e] true)) ; WILL WORK
 
    In practice you want fe to examine the exception raised
    and probably sleep before returning to try f again.  Maybe print a message
    that this a retry is happening."
   [f fe]
-  (let [tryfn
-        (fn [] (try (let [result (f)]
-                      (assert (not (fn? result)))
-                      result)
-                    (catch Exception e (if (fe e) f nil))))]
+  (letfn [(tryfn [] 
+            (try (let [result (f)]
+                   (assert (not (fn? result)))
+                   result)
+                 ;; #(tryfn) for subtle behavior of trampoline, otherwise we'd just return 'f'
+                 (catch Exception e (if (fe e) #(tryfn) nil))))]
     (trampoline tryfn)))
 
 (defn find-if
