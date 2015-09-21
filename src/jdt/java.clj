@@ -112,3 +112,31 @@ Not sure about inherited stuff and static methods."
 ;;; it requires smarter class loaders (which you can write but Java doesn't include by default)
 ;;; See http://code.google.com/p/reflections/ for a tool to do this stuff
 
+(def ^{:tag ThreadGroup}               ;the type hint
+  get-root-thread-group
+  "Return the root ThreadGroup in the JVM. This doesn't change over the JVM lifetime and can be cached."
+  (memoize 
+   (fn []
+     (loop [^ThreadGroup tg (.getThreadGroup (Thread/currentThread))]
+       (let [^ThreadGroup parent (.getParent tg)]
+         (if parent
+           (recur parent)
+           tg))))))
+
+(defn get-thread-count 
+  "Return an estimated count of active threads in the JVM, or specified ThreadGroup and its child groups
+  if a ThreadGroup is specified."
+  [& [^ThreadGroup tg]]
+  (let [tg (or tg (get-root-thread-group))]
+    (.activeCount tg)))
+
+(defn get-all-threads
+  "Return sequence containing all known threads in the JVM, or specified ThreadGroup and its child groups
+  if specified. Bash users, consider 'jstack'."
+  [& [^ThreadGroup tg]]
+  (let [tg (or tg (get-root-thread-group))
+        count (+ (get-thread-count tg) 20) ;in case someone is allocating threads, some headroom
+        result-array (make-array Thread count)]
+    (.enumerate tg result-array true)      ;recurse
+    (filter identity (seq result-array))))
+  
