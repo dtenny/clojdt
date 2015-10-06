@@ -4,8 +4,8 @@
    By default, shell-like tilde expansion is also enabled on inputs to these APIs.
    Author: Dave Tenny"
   (:require clojure.string)             ;split-lines
+  (:require [jdt.shell :as sh :exclude [cat]]) ; conflicts with cat in clojure.core 1.7
   (:use jdt.core)
-  (:use [jdt.shell :only [bash-tilde-expansion]])
   (:use [jdt.closer :only [ensure-close]])
   (:use [clojure.java.io :exclude [copy]])
   (:import (java.io File InputStream OutputStream IOException))
@@ -281,7 +281,7 @@
   (cond (instance? Path x)
         x                               ;*TODO* (as-path "~/.bashrc") works, we should figure out how to expand it here.
         (and (string? x) (not suppress-tilde))
-        (as-path (bash-tilde-expansion x))
+        (as-path (sh/bash-tilde-expansion x))
         :else (as-path x)))
 
 ;;

@@ -4,6 +4,7 @@
 
 (ns ^{:doc "Operating system shell environment wrapping native/host commands"}
   jdt.shell
+  (:refer-clojure :exclude [cat])       ;added in clojure 1.7
   (:use jdt.core)
   (:use clojure.java.io)                ;copy, input-stream, output-stream, etc
   (:use me.raynes.conch)

@@ -134,7 +134,8 @@
           indices (get-indexes form [])]
       (is (= (into #{} indices)
              (into #{} '((:a) (:b 0 :c) (:b 0 :d 0 :f) (:b 0 :d 0 :e) (:b 1 :g)))))
-      (is (= (get-in form (nth indices 2)) "abc")))
+      (let [f-form (some #(and (jdt.core/cl-find :f %) %) indices)]
+        (is (= (get-in form f-form) "abc"))))
     (let [form [10 11 12 {:a 1} [:b :c :d] {:e {:f :g}}]
           indices (get-indexes form [])]
       (is (= indices '((0) (1) (2) (3 :a) (4 0) (4 1) (4 2) (5 :e :f)))))))
