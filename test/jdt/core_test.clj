@@ -245,3 +245,11 @@
                  (is (= @throw-counter 0)))]
     (dotimes [i 4]
       (tester (+ i 1)))))
+
+(deftest test-key-seq->map
+  (is (= (key-seq->map [1 2 3] 'x) {1 'x, 2 'x, 3 'x})))
+
+(deftest test-invert-1-to-many-map
+  (is (= (invert-1-to-many-map {:a [1 2] :b [2 3 4] :c [1] :d [4 5]})
+         {1 '(:a :c), 2 '(:a :b), 3 [:b], 4 '(:b :d), 5 [:d]})))
+

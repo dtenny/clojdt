@@ -6,9 +6,6 @@
   (:require [clojure.java.io :as io])
   (:require [clojure.pprint :refer [cl-format]]))
 
-;; WISHLIST
-;; map-invert  capabilities (smarter than those in clojure.set) for 1:1 and 1:N reversals with resonable behaviors.
-
 (defmulti defined? 
   "True if symbol is defined in namespace, untrue otherwise"
   (fn [ & args ] (mapv class args)))
@@ -1066,3 +1063,31 @@
       ;; Okay, all-keys is now a list of keywords, do the map validation
       (binding [*validate-maps-exception* (fn [str] (IllegalArgumentException. str))]
         (validate-map-keys map-to-validate allkeys)))))
+
+(defn key-seq->map 
+  "Use elements of sequence 's' as key in a map, assigning each key the value 'v'.
+  Return the resulting map.  Current implementation is not lazy, seq will be realized.
+  Example: (key-seq->map [1 2 3] 'x) => {1 x, 2 x, 3 x}"
+  [s v]
+  (loop [result {} s s]
+    (if (empty? s)
+      result
+      (recur (assoc result (first s) v) (rest s)))))
+
+(defn invert-1-to-many-map
+  "Given a map with singleton keys and sequence values,
+  invert yielding a map keyed by the original individual values,
+  and valued by seq of keys that originally indirectly referenced the value.
+  The resulting map values may be of varying types, e.g. seqs OR lists OR vectors, so
+  if you care about it you'll need to clean it up (or we need to fix this function.)
+  Example: 
+  (invert-1-to-many-map {:a [1 2] :b [2 3 4] :c [1] :d [4 5]})
+  => {1 (:a :c), 2 (:a :b), 3 [:b], 4 (:b :d), 5 [:d]}"
+  [map]
+  (loop [result {} kvs (seq map)]
+    (if (empty? kvs)
+      result
+      (let [kv (first kvs)]
+        (recur (merge-with concat result (key-seq->map (second kv) [(first kv)]))
+               (rest kvs))))))
+
