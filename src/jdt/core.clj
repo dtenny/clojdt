@@ -215,6 +215,29 @@
    (= "y"
       (until (re-matches #"[yn]" (prompt prompt-string))))))
 
+(defn start-time "Get a start time for 'elapsed-msecs'" 
+  [] 
+  (. System (nanoTime)))
+
+(defn elapsed-msecs "Return elapsed time in msecs given a value from 'start-time'."
+  [start-time]
+  (/ (double (- (. System (nanoTime)) start-time)) 1000000.0))
+  
+(defmacro time-msecs
+  "Evaluates expr and returns the time it took in milliseconds.  Will not trap exceptions (for now)."
+  [expr]
+  `(let [start# (start-time)]
+     ~expr
+     (elapsed-msecs start#)))
+
+(defmacro value-time-msecs
+  "Evaluates expr and returns a vector with the expression value 
+   and the time it took to execute in milliseconds.  Will not trap exceptions (for now)."
+  [expr]
+  `(let [start# (start-time)
+         value# ~expr]
+     [value# (elapsed-msecs start#)]))
+
 (defn exception-retry
   "Call function f with exception handler fe.  If an
    exception is thrown by f, call fe on the exception, and then call f again

@@ -7,6 +7,9 @@
   (testing "FIXME, I fail."
     (is (= 0 1))))
 
+(deftest test-elapsed
+  (is (>= (time-msecs (Thread/sleep 1)) 1)))
+
 (deftest test-cl-find
   (testing "cl-find"
     (is (= (cl-find :a '(:b :a :c)) :a))
