@@ -1114,3 +1114,10 @@
         (recur (merge-with concat result (key-seq->map (second kv) [(first kv)]))
                (rest kvs))))))
 
+(defn repl-loaded? 
+  "Return true if it looks like we have the REPL available in our lisp."
+  []
+  ;; *TODO*: have a interactive? predicate, maybe satisfied form inspecting
+  ;; some state in repl namespaces?
+  (some (fn [ns] (= (ns-name ns) 'clojure.tools.nrepl)) (all-ns)))
+
