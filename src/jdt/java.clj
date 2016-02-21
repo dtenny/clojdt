@@ -7,6 +7,8 @@
     (:import java.util.jar.JarFile)
     )
 
+;; TODO: Check out clojure.reflect/type-reflect in clojure 1.7
+
 ;; namespace-listing methods (for functions in a namespace)
 ;; java package/class listing methods (for class/functions/variables in a java class/package)
 
