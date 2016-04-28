@@ -37,6 +37,8 @@ return a seq of all accessible java packages that match the string-or-regexp"
   [string-or-regexp]
     (filter (apropos-match-fn string-or-regexp) (map #(.getName %1) (Package/getPackages))))
 
+;; See also: clojure.core/bases and clojure.core/supers
+
 (defn class-direct-methods 
   "Return a seq of Method members directly associated with a class 'c' (not including inherited behaviors."
   [c]
