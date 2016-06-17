@@ -719,6 +719,20 @@
   (or (and (string? string) (> (count string) 0) string)
       alternative))
 
+(defn spaces 
+  "Create string of N spaces in a reasonably Java efficient way.  The pure clojure alternative just 
+  bothers mew too much philosophically, though perhaps I just don't know the proper unwasteful clojure
+  way to do it."
+  [n]
+  (String. (doto (char-array n) (java.util.Arrays/fill \space))))
+
+(defn indent-string
+  "Prefix string s with n spaces."
+  [s n]
+  (if (> n 0)
+    (str (spaces n) s)
+    s))
+
 (defn string-contains? 
   "Return the zero-based index of substring in string if present, nil if not present.
    This method exists because you can't pass '.contains' as a function for java interop,
@@ -1120,4 +1134,31 @@
   ;; *TODO*: have a interactive? predicate, maybe satisfied form inspecting
   ;; some state in repl namespaces?
   (some (fn [ns] (= (ns-name ns) 'clojure.tools.nrepl)) (all-ns)))
+
+(defn exit-unless-interactive 
+  "Kindly don't System/exit my process when I'm in the REPL, 
+  but do abort execution if it's an early function return.
+  Pass the system return code, an integer, zero for success.
+
+  Use this in your main program code instead of calls to System/exit
+  if you want to experiment with code that would otherwise System/exit in the repl."
+  [rc]
+  (if-not (repl-loaded?)
+    (System/exit rc)
+    (throw (ex-info (str "(System/exit " rc ") suppressed for presumed-interactive lisp session.")
+                    {:exit-unless-interactive true :rc rc}))))
+
+(defmacro with-mock-exit 
+  "Handler for exit-unless-interactive exceptions for interactive use.
+  E.g, in some repl code you might do: (with-mock-exit (-main))
+  And assuming your main code uses 'exit-unless-interactive' instead of System/exit,
+  you'll get a return code instead of exiting the process (including youre REPL)."
+  [& body]
+  `(try
+     (do ~@body)
+     (catch Exception e#
+       (let [ed# (ex-data e#)]
+         (if-not (:exit-unless-interactive ed#)
+           (throw e#)
+           (:rc ed#))))))
 
