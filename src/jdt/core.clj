@@ -1162,3 +1162,8 @@
            (throw e#)
            (:rc ed#))))))
 
+(defonce ^:private byte-array-type (type (byte-array 0)))
+(defn byte-array? 
+  "True if x is a byte array, false otherwise."
+  [x]
+  (= (type x) byte-array-type))
