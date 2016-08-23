@@ -1,6 +1,11 @@
 (ns jdt.net "Tools for gathering network information"
     )
 
+(defn get-local-hostname
+  "Return your machine's idea of its hostname."
+  []
+  (-> (java.net.InetAddress/getLocalHost) .getHostName))
+
 (defn get-my-local-ip-address 
   "Return your local/private address (as a string), e.g. 192.168.1.6" 
   []
