@@ -733,6 +733,34 @@
     (str (spaces n) s)
     s))
 
+;; Really stupid but often desired by me map pretty printer, since I can't seem to get clojure's 
+;; pretty printing tools to print a map in a human readable form.
+;; *TODO* make the decision to recurse based on a predicate, one of which could be 
+;; a thing that takes the value and does a pr-str on it and sees how long it is.
+;; (very expensive but would be very effective)
+(defn- pr-map 
+  "Print a map as with 'pr', attempting to keep one key/val pair per line.
+  Vals which are maps start a new line, unless we know they're short to print."
+  [m indent]
+  {:pre [(map? m) (integer? indent)]}
+  (print (spaces indent))
+  (print "{")
+  (loop [ordinal 0 entries (seq m)]
+    (when-not (empty? entries)
+      (let [[k v] (first entries)]
+        (if-not (= ordinal 0)
+          (print (spaces (+ 1 indent))))
+        (pr k)
+        (if (and (map? v)
+                 (or (> (count v) 1)
+                     (let [[k v] (first v)]
+                       (or (map? k) (map? v)))))
+          (do (println) (pr-map v (+ 3 indent)))
+          (do (print " ") (prn v))))
+      (recur (+ ordinal 1) (rest entries))))
+  (print (spaces indent))
+  (println "}"))
+
 (defn string-contains? 
   "Return the zero-based index of substring in string if present, nil if not present.
    This method exists because you can't pass '.contains' as a function for java interop,
