@@ -215,6 +215,14 @@
    (= "y"
       (until (re-matches #"[yn]" (prompt prompt-string))))))
 
+(defn named?
+  "True if object is compatible with the 'name' function, false if it is not."
+  [x]
+  (boolean
+   (or (string? x)
+       (keyword? x)
+       (symbol? x))))
+
 (defn start-time "Get a start time for 'elapsed-msecs'" 
   [] 
   (. System (nanoTime)))
